@@ -39,94 +39,59 @@ jobs:
       - name: Install Python deps
         run: pip install anthropic
 
-      - name: Build prompt
-        id: prompt
+      - name: Resolve issue number
+        id: meta
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_ACTION: ${{ github.event.action }}
-          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.issue_number || github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
-          LABEL_NAME: ${{ github.event.label.name }}
-          ASSIGNEE: ${{ github.event.assignee.login }}
           REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_NUMBER: ${{ github.event.inputs.issue_number }}
+          EVENT_NUMBER: ${{ github.event.issue.number }}
         run: |
-          # For manual runs, fetch issue data via gh
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            ISSUE_JSON=$(gh api repos/${REPO}/issues/${ISSUE_NUMBER})
-            ISSUE_TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
-            ISSUE_BODY=$(echo "$ISSUE_JSON" | jq -r '.body // ""')
-            COMMENTS=$(gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
-              | jq -r '.[] | "**\(.user.login):** \(.body)"' | head -20)
-            PROMPT="Manual triage of issue #${ISSUE_NUMBER}.
-
-Title: ${ISSUE_TITLE}
-
-Body:
-${ISSUE_BODY}
-
-Existing comments:
-${COMMENTS}
-
-Analyse the full issue including all comments. Attempt a fix if the problem is clear and small."
-            printf '%s' "$PROMPT" > /tmp/prompt.txt
-            echo "number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "$EVENT_NAME" = "issue_comment" ]; then
-            PROMPT="A new comment was added to issue #${ISSUE_NUMBER}.
-
-Issue title: ${ISSUE_TITLE}
-Issue body:
-${ISSUE_BODY}
-
-New comment by ${COMMENT_AUTHOR}:
-${COMMENT_BODY}
-
-If the comment describes a bug or provides new technical details that suggest a fix, attempt it.
-If it is just a question, answer it. If off-topic, write a brief acknowledgement only."
-
-          elif [ "$EVENT_ACTION" = "opened" ]; then
-            PROMPT="A new issue was opened (#${ISSUE_NUMBER}).
-
-Title: ${ISSUE_TITLE}
-
-Body:
-${ISSUE_BODY}
-
-Analyse the issue. If it describes a clear, small bug you can fix by editing source files, fix it.
-Otherwise explain the problem and suggest manual next steps."
-
-          elif [ "$EVENT_ACTION" = "closed" ]; then
-            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') was just closed. Write a brief 2-sentence closing summary. Do not attempt any code fix."
-
-          elif [ "$EVENT_ACTION" = "reopened" ]; then
-            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') was reopened. Acknowledge this and ask the reporter to provide any new details. Do not attempt a code fix."
-
-          elif [ "$EVENT_ACTION" = "labeled" ]; then
-            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') was labeled '${LABEL_NAME}'. Write one sentence acknowledging the label. Do not attempt a code fix."
-
-          elif [ "$EVENT_ACTION" = "assigned" ]; then
-            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') was assigned to ${ASSIGNEE}. Write one sentence acknowledging the assignment. Do not attempt a code fix."
-
+            echo "number=${DISPATCH_NUMBER}" >> "$GITHUB_OUTPUT"
           else
-            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') had action '${EVENT_ACTION}'. Write a brief acknowledgement."
+            echo "number=${EVENT_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
 
-          # Write prompt to file to avoid shell quoting issues
-          printf '%s' "$PROMPT" > /tmp/prompt.txt
-          echo "number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+      - name: Fetch issue data for manual dispatch
+        id: fetch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.meta.outputs.number }}
+        run: |
+          gh api "repos/${REPO}/issues/${NUMBER}" > /tmp/issue.json
+          gh api "repos/${REPO}/issues/${NUMBER}/comments" > /tmp/comments.json
+
+          TITLE=$(jq -r '.title' /tmp/issue.json)
+          BODY=$(jq -r '.body // ""' /tmp/issue.json)
+          COMMENTS=$(jq -r '.[] | "[\(.user.login)]: \(.body)"' /tmp/comments.json | head -30)
+
+          echo "title=${TITLE}" >> "$GITHUB_OUTPUT"
+          printf '%s' "$BODY" > /tmp/issue_body.txt
+          printf '%s' "$COMMENTS" > /tmp/issue_comments.txt
 
       - name: Run Claude autofix agent
         id: claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          ISSUE_NUMBER: ${{ steps.meta.outputs.number }}
+          ISSUE_TITLE: ${{ github.event_name == 'workflow_dispatch' && steps.fetch.outputs.title || github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event_name != 'workflow_dispatch' && github.event.issue.body || '' }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          LABEL_NAME: ${{ github.event.label.name }}
+          ASSIGNEE: ${{ github.event.assignee.login }}
         run: |
-          export PROMPT="$(cat /tmp/prompt.txt)"
+          # For manual dispatch, load body and comments from files written above
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            export ISSUE_BODY="$(cat /tmp/issue_body.txt)"
+            export ISSUE_COMMENTS="$(cat /tmp/issue_comments.txt)"
+          fi
           python3 .github/scripts/autofix.py > /tmp/result.json
           echo "attempted_fix=$(jq -r '.attempted_fix' /tmp/result.json)" >> "$GITHUB_OUTPUT"
 
@@ -135,14 +100,13 @@ Otherwise explain the problem and suggest manual next steps."
         if: steps.claude.outputs.attempted_fix == 'true'
         run: |
           FILES=$(git diff --name-only | wc -l)
-          LINES=$(git diff --shortstat | grep -oP '\d+ insertion' | grep -oP '\d+' || echo 0)
-          LINES=$((LINES + $(git diff --shortstat | grep -oP '\d+ deletion' | grep -oP '\d+' || echo 0)))
-
+          INSERTIONS=$(git diff --shortstat | grep -oP '\d+(?= insertion)' || echo 0)
+          DELETIONS=$(git diff --shortstat | grep -oP '\d+(?= deletion)' || echo 0)
+          LINES=$((INSERTIONS + DELETIONS))
           echo "Changed files: $FILES, lines: $LINES"
-
           if [ "$FILES" -le 3 ] && [ "$LINES" -le 50 ]; then
             git add -u
-            git commit -m "Auto-fix: issue #${{ steps.prompt.outputs.number }}
+            git commit -m "Auto-fix: issue #${{ steps.meta.outputs.number }}
 
 Applied by Claude based on issue report.
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
@@ -150,43 +114,42 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           else
             echo "pushed=false" >> "$GITHUB_OUTPUT"
-            git checkout -- .  # discard — too large for auto-push
+            git checkout -- .
           fi
-
-      - name: Build final comment
-        run: |
-          BASE_COMMENT=$(jq -r '.comment' /tmp/result.json)
-
-          if [ "${{ steps.push.outputs.pushed }}" = "true" ]; then
-            DIFF_SUMMARY=$(git show --stat HEAD 2>/dev/null || echo "")
-            EXTRA="
-
----
-**Auto-fix committed to master.**
-\`\`\`
-${DIFF_SUMMARY}
-\`\`\`"
-
-          elif [ "${{ steps.claude.outputs.attempted_fix }}" = "true" ]; then
-            DIFF=$(git diff -- '*.cpp' '*.h' '*.cmake' 'CMakeLists.txt' | head -200)
-            EXTRA="
-
----
-**A fix was drafted but is too large to auto-push** (>3 files or >50 lines). Proposed diff (truncated to 200 lines):
-\`\`\`diff
-${DIFF}
-\`\`\`"
-          else
-            EXTRA=""
-          fi
-
-          printf '%s%s' "$BASE_COMMENT" "$EXTRA" > /tmp/final_comment.txt
 
       - name: Post comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          PUSHED: ${{ steps.push.outputs.pushed }}
+          ATTEMPTED: ${{ steps.claude.outputs.attempted_fix }}
         run: |
-          gh issue comment "${{ steps.prompt.outputs.number }}" \
+          COMMENT=$(jq -r '.comment' /tmp/result.json)
+
+          if [ "$PUSHED" = "true" ]; then
+            STAT=$(git show --stat HEAD 2>/dev/null || echo "")
+            FOOTER="---
+**Auto-fix committed to master.**
+\`\`\`
+${STAT}
+\`\`\`"
+          elif [ "$ATTEMPTED" = "true" ]; then
+            DIFF=$(git diff -- '*.cpp' '*.h' 'CMakeLists.txt' | head -200)
+            FOOTER="---
+**Fix drafted but too large to auto-push** (>3 files or >50 lines). Proposed diff:
+\`\`\`diff
+${DIFF}
+\`\`\`"
+          else
+            FOOTER=""
+          fi
+
+          if [ -n "$FOOTER" ]; then
+            printf '%s\n\n%s' "$COMMENT" "$FOOTER" > /tmp/final_comment.txt
+          else
+            printf '%s' "$COMMENT" > /tmp/final_comment.txt
+          fi
+
+          gh issue comment "${{ steps.meta.outputs.number }}" \
             --repo "$REPO" \
             --body "$(cat /tmp/final_comment.txt)"
