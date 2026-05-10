@@ -13,7 +13,10 @@ permissions:
 jobs:
   triage:
     runs-on: ubuntu-latest
-    if: github.actor != 'github-actions[bot]'
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      (github.event.issue.user.login == 'pejosonic' || github.event.issue.user.login == 'luncheonticket' ||
+       github.event.comment.user.login == 'pejosonic' || github.event.comment.user.login == 'luncheonticket')
 
     steps:
       - uses: actions/checkout@v4
@@ -106,16 +109,13 @@ Otherwise explain the problem and suggest manual next steps."
           echo "Changed files: $FILES, lines: $LINES"
 
           if [ "$FILES" -le 3 ] && [ "$LINES" -le 50 ]; then
-            BRANCH="autofix/issue-${{ steps.prompt.outputs.number }}"
-            git checkout -b "$BRANCH"
             git add -u
             git commit -m "Auto-fix: issue #${{ steps.prompt.outputs.number }}
 
 Applied by Claude based on issue report.
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-            git push origin "$BRANCH"
+            git push origin master
             echo "pushed=true" >> "$GITHUB_OUTPUT"
-            echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           else
             echo "pushed=false" >> "$GITHUB_OUTPUT"
             git checkout -- .  # discard — too large for auto-push
@@ -126,16 +126,14 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
           BASE_COMMENT=$(jq -r '.comment' /tmp/result.json)
 
           if [ "${{ steps.push.outputs.pushed }}" = "true" ]; then
-            BRANCH="${{ steps.push.outputs.branch }}"
-            DIFF_SUMMARY=$(git diff origin/master..."$BRANCH" --stat 2>/dev/null || echo "")
+            DIFF_SUMMARY=$(git show --stat HEAD 2>/dev/null || echo "")
             EXTRA="
 
 ---
-**Auto-fix pushed** to branch \`${BRANCH}\`.
+**Auto-fix committed to master.**
 \`\`\`
 ${DIFF_SUMMARY}
-\`\`\`
-Please review and merge if correct."
+\`\`\`"
 
           elif [ "${{ steps.claude.outputs.attempted_fix }}" = "true" ]; then
             DIFF=$(git diff -- '*.cpp' '*.h' '*.cmake' 'CMakeLists.txt' | head -200)
