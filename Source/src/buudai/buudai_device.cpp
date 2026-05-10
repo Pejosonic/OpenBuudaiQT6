@@ -304,8 +304,14 @@ namespace Buudai {
 		else
 			return transferred;
 	}
+
+	/// \brief Clears a halted/stalled endpoint so subsequent transfers can succeed.
+	void Device::clearHalt(unsigned char endpoint) {
+		if(this->handle)
+			libusb_clear_halt(this->handle, endpoint);
+	}
 #endif
-	
+
 	/// \brief Bulk write to the oscilloscope.
 	/// \param data Buffer for the sent/recieved data.
 	/// \param length The length of the packet.

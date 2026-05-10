@@ -157,10 +157,13 @@ namespace Buudai {
 			if (status != BUUDAI_DDS140_FIFO_READY)
 				return LIBUSB_ERROR_TIMEOUT;
 
-			// Read the fixed 131072-byte capture buffer from EP6
+			// Read the fixed 131072-byte capture buffer from EP6.
+			// Clear any endpoint halt/stall that may have accumulated from a
+			// prior failed transfer (libusb returns LIBUSB_ERROR_IO otherwise).
 			static unsigned char dds140_buf[BUUDAI_DDS140_BUFFER_SIZE];
 			usbMutex.lock();
-			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, 1);
+			device->clearHalt(BUUDAI_DDS140_EP_IN);
+			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
 			usbMutex.unlock();
 
 			if (errorCode < 0)

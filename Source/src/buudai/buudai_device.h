@@ -63,6 +63,7 @@ namespace Buudai {
 			// Various methods to handle USB transfers
 #if LIBUSB_VERSION != 0
 			int bulkTransfer(unsigned char endpoint, unsigned char *data, unsigned int length, int attempts = BUUDAI_ATTEMPTS_DEFAULT);
+			void clearHalt(unsigned char endpoint);
 #endif
 			int bulkWrite(unsigned char *data, unsigned int length, int attempts = BUUDAI_ATTEMPTS_DEFAULT);
 			int bulkRead(unsigned char *data, unsigned int length, int attempts = BUUDAI_ATTEMPTS_DEFAULT);
