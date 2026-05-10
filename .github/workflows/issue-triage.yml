@@ -41,31 +41,19 @@ jobs:
       - name: Install Python deps
         run: pip install anthropic
 
-      - name: Resolve issue number
-        id: meta
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          DISPATCH_NUMBER: ${{ github.event.inputs.issue_number }}
-          EVENT_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "number=${DISPATCH_NUMBER}" >> "$GITHUB_OUTPUT"
-          else
-            echo "number=${EVENT_NUMBER}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Fetch issue data for manual dispatch
         id: fetch
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          NUMBER: ${{ steps.meta.outputs.number }}
+          NUMBER: ${{ inputs.issue_number }}
         run: |
           gh issue view "$NUMBER" --repo "$REPO" --json title,body,comments > /tmp/issue_full.json
           jq -r '.title' /tmp/issue_full.json > /tmp/issue_title.txt
           jq -r '.body // ""' /tmp/issue_full.json > /tmp/issue_body.txt
           jq -r '.comments[] | "[\(.author.login)]: \(.body)"' /tmp/issue_full.json | head -30 > /tmp/issue_comments.txt
+          echo "number=${NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude autofix agent
         id: claude
@@ -73,7 +61,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
-          ISSUE_NUMBER: ${{ steps.meta.outputs.number }}
+          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
@@ -101,7 +89,7 @@ jobs:
           if [ "$FILES" -le 3 ] && [ "$LINES" -le 50 ]; then
             git add -u
             printf 'Auto-fix: issue #%s\n\nApplied by Claude based on issue report.\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>' \
-              "${{ steps.meta.outputs.number }}" > /tmp/commit_msg.txt
+              "${{ steps.fetch.outputs.number || github.event.issue.number }}" > /tmp/commit_msg.txt
             git commit -F /tmp/commit_msg.txt
             git push origin master
             echo "pushed=true" >> "$GITHUB_OUTPUT"
@@ -116,14 +104,14 @@ jobs:
           REPO: ${{ github.repository }}
           PUSHED: ${{ steps.push.outputs.pushed }}
           ATTEMPTED: ${{ steps.claude.outputs.attempted_fix }}
-          NUMBER: ${{ steps.meta.outputs.number }}
+          NUMBER: ${{ steps.fetch.outputs.number || github.event.issue.number }}
         run: |
           COMMENT=$(jq -r '.comment' /tmp/result.json)
 
           if [ "$PUSHED" = "true" ]; then
             git show --stat HEAD 2>/dev/null > /tmp/stat.txt || true
-            printf '\n\n---\n**Auto-fix committed to master.**\n```\n%s\n```' \
-              "$(cat /tmp/stat.txt)" >> /tmp/result_comment.txt
+            printf '%s\n\n---\n**Auto-fix committed to master.**\n```\n%s\n```' \
+              "$COMMENT" "$(cat /tmp/stat.txt)" > /tmp/result_comment.txt
           elif [ "$ATTEMPTED" = "true" ]; then
             git diff -- '*.cpp' '*.h' 'CMakeLists.txt' | head -200 > /tmp/diff.txt
             printf '\n\n---\n**Fix drafted but too large to auto-push** (>3 files or >50 lines).\n```diff\n%s\n```' \
