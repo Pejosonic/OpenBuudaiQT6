@@ -218,16 +218,15 @@ namespace Buudai {
 							const libusb_endpoint_descriptor *endpointDescriptor;
 							this->outPacketLength = 0;
 							this->inPacketLength = 0;
+							unsigned char epOut = (this->model == MODEL_DDS140) ? BUUDAI_DDS140_EP_OUT : BUUDAI_EP_OUT;
+							unsigned char epIn  = (this->model == MODEL_DDS140) ? BUUDAI_DDS140_EP_IN  : BUUDAI_EP_IN;
 							for (int endpoint = 0; endpoint < interfaceDescriptor->bNumEndpoints; endpoint++) {
 								endpointDescriptor = &(interfaceDescriptor->endpoint[endpoint]);
-								switch(endpointDescriptor->bEndpointAddress) {
-									case BUUDAI_EP_OUT:
-										this->outPacketLength = endpointDescriptor->wMaxPacketSize;
-										break;
-									case BUUDAI_EP_IN:
-										this->inPacketLength = endpointDescriptor->wMaxPacketSize;
-										break;
-								}
+								unsigned char addr = endpointDescriptor->bEndpointAddress;
+								if (addr == epOut)
+									this->outPacketLength = endpointDescriptor->wMaxPacketSize;
+								else if (addr == epIn)
+									this->inPacketLength = endpointDescriptor->wMaxPacketSize;
 							}
 							message = tr("Device found: Buudai %1 (%2)").arg(this->modelStrings[this->model], deviceAddress);
 
