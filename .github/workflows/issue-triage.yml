@@ -1,0 +1,46 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Analyse issue with Claude and comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          RESPONSE=$(curl -sf https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$(jq -n \
+              --arg title "$ISSUE_TITLE" \
+              --arg body "$ISSUE_BODY" \
+              '{
+                model: "claude-haiku-4-5-20251001",
+                max_tokens: 1024,
+                system: "You are a helpful assistant triaging GitHub issues for OpenBuudaiQT6, an open-source Qt6 oscilloscope application for Buudai/SainSmart USB oscilloscopes (DDS120, DDS140). Analyse the issue and provide: 1) a brief diagnosis of the problem, 2) likely cause, 3) suggested next steps or workaround. Be concise and technical. Do not use excessive markdown — a few short paragraphs is ideal. End with a note that this is an automated analysis.",
+                messages: [{
+                  role: "user",
+                  content: ("Issue title: " + $title + "\n\nIssue body:\n" + $body)
+                }]
+              }')" \
+          )
+
+          COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          gh issue comment "$ISSUE_NUMBER" \
+            --repo "$REPO" \
+            --body "$COMMENT"
