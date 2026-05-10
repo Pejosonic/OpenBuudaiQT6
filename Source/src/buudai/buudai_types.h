@@ -32,10 +32,17 @@
 
 #define BUUDAI_DDS120_VID        0x8102 ///< VID for Buudai/Sainsmart DDS120
 #define BUUDAI_DDS140_VID        0x8312 ///< VID for Buudai/Sainsmart DDS140
-#define BUUDAI_EP_OUT              0x02 ///< OUT Endpoint for bulk transfers
-#define BUUDAI_EP_IN               0x82 ///< IN Endpoint for bulk transfers
+#define BUUDAI_EP_OUT              0x02 ///< OUT Endpoint for bulk transfers (DDS120)
+#define BUUDAI_EP_IN               0x82 ///< IN Endpoint for bulk transfers (DDS120, EP2)
+#define BUUDAI_DDS140_EP_IN        0x86 ///< IN Endpoint for DDS140 sample data (EP6)
 #define BUUDAI_TIMEOUT              500 ///< Timeout for USB transfers in ms
 #define BUUDAI_ATTEMPTS_DEFAULT       3 ///< The number of transfer attempts
+
+// DDS140 acquisition constants
+#define BUUDAI_DDS140_BUFFER_SIZE  131072 ///< Fixed capture buffer: 0x20000 bytes
+#define BUUDAI_DDS140_HEADER_SKIP       8 ///< Bytes to skip at start of buffer (device glitch)
+#define BUUDAI_DDS140_FIFO_READY     0x21 ///< FIFO status response when data is ready
+#define BUUDAI_DDS140_POLL_TIMEOUT   2000 ///< Max FIFO poll iterations (~2 s at 1 ms each)
 
 #define BUUDAI_CHANNELS               2 ///< Number of physical channels
 #define BUUDAI_SPECIAL_CHANNELS       0 ///< Number of special channels
@@ -99,6 +106,29 @@ namespace Buudai {
 		///   Sampling rate 0x10:48MHz, 0x01:2.4MHz, 0x11:240kHz
 		/// </p>
 		SAMPLERATE = 0x94,
+
+		// DDS140-specific commands
+		FIFO_STATUS      = 0x50, ///< Poll: returns 0x21 when capture buffer is ready
+		MODE_SELECT      = 0x34, ///< Oscilloscope/logic-analyzer mode select
+		SECONDARY_START  = 0x35, ///< Secondary start (DDS140 init)
+		DEVICE_SETUP     = 0x63, ///< Device setup init (arg = 0x04)
+		TIMER_CONTROL    = 0x75, ///< Timer control (arg = 0x00)
+		TIMER_BYTE0      = 0x76,
+		TIMER_BYTE1      = 0x77,
+		TIMER_BYTE2      = 0x78,
+		TIMER_BYTE3      = 0x79,
+		OFFSET_BYTE0     = 0x7a,
+		OFFSET_BYTE1     = 0x7b,
+		OFFSET_BYTE2     = 0x7c,
+		OFFSET_BYTE3     = 0x7d,
+		TRIGGER_SOURCE_CMD = 0xe7, ///< Trigger source: 0x00=internal, 0x01=external
+
+		// DDS140 sample rate commands — command byte IS the rate selector
+		DDS140_RATE_100M = 0x10,
+		DDS140_RATE_80M  = 0x11,
+		DDS140_RATE_10M  = 0x1c,
+		DDS140_RATE_625K = 0x18,
+		DDS140_RATE_39K  = 0x1b,
 	};
 	
 	//////////////////////////////////////////////////////////////////////////////
@@ -130,6 +160,13 @@ namespace Buudai {
 		SET_SAMPLERATE_48MS  = 0x10,
 		SET_SAMPLERATE_2_4MS = 0x01,
 		SET_SAMPLERATE_240KS = 0x11,
+
+		// DDS140 control values
+		CHANNEL_ENABLE_CH1   = 0x10, ///< Enable CH1 only (sent to cmd 0x24)
+		CHANNEL_ENABLE_BOTH  = 0x18, ///< Enable both channels (sent to cmd 0x24)
+		MODE_OSCILLOSCOPE    = 0x00, ///< Oscilloscope mode for MODE_SELECT
+		DEVICE_SETUP_INIT    = 0x04, ///< Init value for DEVICE_SETUP
+		TRIGGER_INTERNAL     = 0x00, ///< Internal trigger for TRIGGER_SOURCE_CMD
 	};
 	
 	//////////////////////////////////////////////////////////////////////////////

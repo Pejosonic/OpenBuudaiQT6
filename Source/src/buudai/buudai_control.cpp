@@ -141,24 +141,69 @@ namespace Buudai {
 	int Control::getSamples(bool process) {
         long int errorCode;
 
+		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
+		if (device->getModel() == MODEL_DDS140) {
+			// Arm the trigger
+			sendRequest(FIFO_CONTROL, 0x00);
 
+			// Poll FIFO status until buffer is ready (0x21) or timeout
+			unsigned char status = 0;
+			for (int poll = 0; poll < BUUDAI_DDS140_POLL_TIMEOUT; poll++) {
+				status = sendRequest(FIFO_STATUS, 0x00);
+				if (status == BUUDAI_DDS140_FIFO_READY)
+					break;
+				usleep(1000);
+			}
+			if (status != BUUDAI_DDS140_FIFO_READY)
+				return LIBUSB_ERROR_TIMEOUT;
+
+			// Read the fixed 131072-byte capture buffer from EP6
+			static unsigned char dds140_buf[BUUDAI_DDS140_BUFFER_SIZE];
+			usbMutex.lock();
+			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, 1);
+			usbMutex.unlock();
+
+			if (errorCode < 0)
+				return errorCode;
+
+			if (process) {
+				unsigned long int channelDataCount =
+					(BUUDAI_DDS140_BUFFER_SIZE - BUUDAI_DDS140_HEADER_SKIP) / BUUDAI_CHANNELS;
+
+				samplesMutex.lock();
+				for (int channel = 0; channel < BUUDAI_CHANNELS; channel++) {
+					if (!samples[channel] || samplesSize[channel] != channelDataCount) {
+						if (samples[channel])
+							delete[] samples[channel];
+						samples[channel] = new double[channelDataCount];
+						samplesSize[channel] = channelDataCount;
+					}
+					for (unsigned long int i = 0; i < channelDataCount; i++) {
+						unsigned long int pos = BUUDAI_DDS140_HEADER_SKIP + i * BUUDAI_CHANNELS + channel;
+						samples[channel][i] =
+							((double)dds140_buf[pos] / sampleRange[channel] - offsetReal[channel])
+							* gainSteps[gain[channel]] * cal[channel];
+					}
+				}
+				samplesMutex.unlock();
+				emit samplesAvailable(&(samples), &(samplesSize),
+					(double)samplerateMax / samplerateDivider, &(samplesMutex));
+			}
+			return 0;
+		}
+
+		// ---- DDS120 path ----
 		// Save raw data to temporary buffer
         unsigned long int dataCount = bufferSize * BUUDAI_CHANNELS * bufferMulti; // Adequate sizes for all timebases
-        // Oversizing buffer unlikely to overcome an observed capture discountinuity at 2KB boundaries (HW/FW limitation?)
-        //unsigned long int dataCount = bufferSize * BUUDAI_CHANNELS * bufferMulti + 4096;
         unsigned long int dataLength = dataCount;
-		
+
 		unsigned char data[dataLength];
 		usbMutex.lock();
 		unsigned char res = 0;
         device->controlTransfer(0, (unsigned char)FIFO_CONTROL, &res, 1, (unsigned char)FIFO_CONTROL_CLEAR, 0, 1);
         errorCode = device->bulkReadMulti(data, dataLength, 3);
-        //errorCode = device->bulkRead(data, dataLength, 1);
-        // device->controlTransfer(0, (unsigned char)FIFO_CONTROL, &res, 1, (unsigned char)FIFO_CONTROL_CLEAR, 0, 1);
 
 		usbMutex.unlock();
-
-        //usleep(1000000);
 
 		if (errorCode < 0)
 			return errorCode;
@@ -348,6 +393,19 @@ oldTriggerOffset = SKIP; // Clear trigger position for next cycle free running w
 				sendRequest(SAMPLERATE, SET_SAMPLERATE_2_4MS);
 				break;
 			case MODEL_DDS140:
+				unsupported = false;
+				// Timer/offset initialisation (bytes 0x76–0x7d all to 0x00)
+				for (unsigned char cmd = TIMER_BYTE0; cmd <= OFFSET_BYTE3; cmd++)
+					sendRequest(cmd, 0x00);
+				sendRequest(DEVICE_SETUP, DEVICE_SETUP_INIT);
+				sendRequest(TIMER_CONTROL, 0x00);
+				sendRequest(CH1_GAIN, CH1_GAIN_200MV);
+				sendRequest(CH2_GAIN, CH2_GAIN_200MV);
+				sendRequest(CH1_COUPLING, CHANNEL_ENABLE_BOTH); // cmd 0x24: channel enable on DDS140
+				sendRequest(TRIGGER_SOURCE_CMD, TRIGGER_INTERNAL);
+				sendRequest(MODE_SELECT, MODE_OSCILLOSCOPE);
+				sendRequest(SECONDARY_START, 0x00);
+				sendRequest(DDS140_RATE_100M, 0x00); // default 100 MHz
 				break;
 			
 			default:
@@ -367,7 +425,7 @@ oldTriggerOffset = SKIP; // Clear trigger position for next cycle free running w
 				break;
 			
 			case MODEL_DDS140:
-				samplerateChannelMax = 48e6;
+				samplerateChannelMax = 100e6;
 				samplerateFastMax = 100e6;
 				break;
 			default: // just to quite the compiler
@@ -407,29 +465,42 @@ oldTriggerOffset = SKIP; // Clear trigger position for next cycle free running w
 		if (!device->isConnected() || sampleRate == 0)
 			return 0;
 		unsigned char res;
+
+		if (device->getModel() == MODEL_DDS140) {
+			// DDS140: command byte IS the rate selector; value is always 0x00
+			bufferMulti = 1;
+			if (sampleRate > 80e6) {
+				sampleRate = 100e6;
+				res = sendRequest(DDS140_RATE_100M, 0x00);
+			} else if (sampleRate > 10e6) {
+				sampleRate = 80e6;
+				res = sendRequest(DDS140_RATE_80M, 0x00);
+			} else if (sampleRate > 625e3) {
+				sampleRate = 10e6;
+				res = sendRequest(DDS140_RATE_10M, 0x00);
+			} else if (sampleRate > 39e3) {
+				sampleRate = 625e3;
+				res = sendRequest(DDS140_RATE_625K, 0x00);
+			} else {
+				sampleRate = 39e3;
+				res = sendRequest(DDS140_RATE_39K, 0x00);
+			}
+			samplerateDivider = samplerateMax / sampleRate;
+			return sampleRate;
+		}
+
+		// DDS120 path
 		if (sampleRate > 2.4e8) {
-
-            // Multiplier to stretch buffersize
-
             bufferMulti = 1;
             sampleRate = 48e6;
-
 			res = sendRequest(SAMPLERATE, SET_SAMPLERATE_48MS);
 		} else if (sampleRate > 240e5) {
-
-            // Multiplier to stretch buffersize
-
             bufferMulti = 1;
             sampleRate = 2.4e6;
-
 			res = sendRequest(SAMPLERATE, SET_SAMPLERATE_2_4MS);
-		} else { // sampleRate <= 240e5
-
-            // Multiplier to stretch buffersize - Calculation
-
+		} else {
             bufferMulti = int(1179648 / sampleRate) + 1;
             sampleRate = 240e3;
-
 			res = sendRequest(SAMPLERATE, SET_SAMPLERATE_240KS);
 		}
 		samplerateDivider = samplerateMax / sampleRate;
