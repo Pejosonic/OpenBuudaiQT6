@@ -1,88 +1,114 @@
-# OpenBuudai
-OpenBuudai - Open Source Oscilloscope Software based on OpenHantek
+# OpenBuudai Qt6
 
-OpenBuudai is initially based on OpenHantek by Oliver Haag.
+Open Source Oscilloscope Software based on OpenHantek, migrated to **Qt6** with a modern CMake build system.
 
-https://github.com/OpenHantek/openhantek
+Originally based on [OpenHantek](https://github.com/OpenHantek/openhantek) by Oliver Haag, extended by doctormord to support Buudai/Rocktech hardware, and updated to Qt6 by [Pejosonic](https://github.com/Pejosonic).
 
-Current support:
-- SainSmart DDS120
-- SainSmart DDS140 (untested)
-- Buudai/Rocktech BM102
+## Supported Hardware
 
-## Hardware, Teardown & Discussion
+| Device | Status |
+|--------|--------|
+| SainSmart DDS120 | Supported |
+| Buudai / Rocktech BM102 | Supported |
+| SainSmart DDS140 | Untested |
 
-http://www.360customs.de/en/2014/10/usb-oszilloskop-sainsmart-dds120-2-kanal-20mhz-50msps-buudairocktech-bm102/
-http://www.eevblog.com/forum/testgear/sainsmart-dds120-usb-oscilloscope-%28buudai-bm102%29/
+## Download
 
-## Build
+Pre-built Linux binaries are published automatically on every commit:
+
+**[Latest Linux release →](https://github.com/Pejosonic/OpenBuudaiQT6/releases/tag/latest)**
+
+## Qt6 Migration
+
+This fork migrates the original Qt4/Qt5 + qmake project to **Qt6 + CMake**. Key changes:
+
+| Area | Change |
+|------|--------|
+| Build system | `qmake` → `CMake 3.19+` |
+| OpenGL widget | `QGLWidget` → `QOpenGLWidget + QOpenGLFunctions` |
+| OpenGL context | Added `QSurfaceFormat` Compatibility Profile for fixed-function pipeline |
+| Color helpers | `qglColor / qglClearColor` → `glColor4f / glClearColor` |
+| Widget update | Removed `updateGL()` slot → `update()` |
+| 2D transforms | `QMatrix / setMatrix` → `QTransform / setTransform` |
+| Printer API | `QPrinter::setOrientation / Portrait / Landscape` → `QPageLayout` API |
+| Palette | `QPalette::Background` → `QPalette::Window` |
+| Library info | `QLibraryInfo::location()` → `QLibraryInfo::path()` |
+| Font metrics | `QFontMetrics::size(0, text)` → `boundingRect(text)` |
+| WindowFlags | Default arg `= 0` → `= Qt::WindowFlags()` |
+| Mouse events | `event->x() / y()` → `event->position().x() / y()` |
+| Headers | Added missing explicit Qt includes required by Qt6 |
+| Qt modules | Added `Qt6::OpenGLWidgets`, `Qt6::PrintSupport` |
+
+## Build from Source
+
+### Requirements
+
+- CMake 3.19+
+- Qt 6.2+ (Core, Gui, Widgets, OpenGL, OpenGLWidgets, PrintSupport)
+- libusb-1.0
+- fftw3
+
+### Linux (Ubuntu / Debian)
+
+```bash
+sudo apt-get install cmake ninja-build \
+    qt6-base-dev libqt6opengl6-dev \
+    libgl-dev libusb-1.0-0-dev libfftw3-dev
+
+git clone https://github.com/Pejosonic/OpenBuudaiQT6.git
+cd OpenBuudaiQT6
+cmake -S Source -B build -G Ninja
+cmake --build build
+```
+
+### macOS (Homebrew)
+
+```bash
+brew install cmake ninja qt libusb fftw
+
+git clone https://github.com/Pejosonic/OpenBuudaiQT6.git
+cd OpenBuudaiQT6
+cmake -S Source -B build -G Ninja -DCMAKE_PREFIX_PATH=$(brew --prefix qt)
+cmake --build build
+```
 
 ### Windows
 
-You want this version of Qt and MinGW:
-http://sourceforge.net/projects/qtx64/files/qt-x86/5.3.2/mingw-4.9/dwarf/qt-5.3.2-x86-mingw491r1-dw2-opengl.exe/download
+Install [Qt 6](https://www.qt.io/download) and [CMake](https://cmake.org/download/), then:
 
-Get this version of FFTW:
-ftp://ftp.fftw.org/pub/fftw/fftw-3.3.4-dll32.zip
-
-Note that you must create .lib files using MS Visual Studio.
-I believe the Express C++ version has the lib.exe program which does this.
-Issue 'vcvars32.bat' in C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin to set up the path. Then, lib /def:libfftw3-3.def etc. in the fftw-3.3.4-dll32 folder to create the lib file.)
-
-Get this version of LibUSB:
-http://sourceforge.net/projects/libusb/files/libusb-1.0/libusb-1.0.18/
-
-See the #Configuration section of the .pro file for where to put LibUSB and FFTW.
-
-Screenshots of path setup is shown here:
-
-http://www.eevblog.com/forum/testgear/sainsmart-dds120-usb-oscilloscope-%28buudai-bm102%29/msg548786/#msg548786
-
-### Linux
-
-To build OpenHantek from source, you need Qt 4 and FFTW 3. Under Debian or Ubuntu you can just install the packages libqt4-dev and libfftw3-dev. I don't know the package names for other distributions but they may be similar.
-
-Edit Source/OpenHantek.pro to enable the following lines while disabling comparable lines above
-```
-INCLUDEPATH += C:/Qt/lib/libusb/include/ # Find .h files
-# LIBS += -LC:/Qt/lib/libusb/MS32/dll/ -llibusb-1.0 # Find .lib files
-LIBS +=  -lusb-1.0 # Find .lib files Linux Build
-
-INCLUDEPATH += C:/Qt/lib/fftw-3.3.4-dll32 # Find .h files
-# LIBS += -LC:/Qt/lib/fftw-3.3.4-dll32/ -lfftw3-3 # Find .lib files
-LIBS += -lfftw3 # Find .lib files Linux Build
+```cmd
+cmake -S Source -B build -DCMAKE_PREFIX_PATH=C:\Qt\6.x.x\msvc2019_64
+cmake --build build --config Release
 ```
 
-After you've installed the requirements run the following commands inside the Source directory:
+Provide libusb and fftw paths via `-DCMAKE_PREFIX_PATH` or set `LIBUSB_INCLUDE_DIRS` / `FFTW_INCLUDE_DIRS` manually.
 
+## USB Permissions (Linux)
+
+If the status bar shows `Couldn't open device XXX:YYY: Access denied`:
+
+**Quick fix** (per plug-in):
 ```bash
-$ qmake PREFIX=/usr
-$ make
-$ make install
+sudo chmod 666 /dev/bus/usb/XXX/YYY
 ```
 
-#### Troubleshooting
-When status bar of the application shows "Couldn't open device XXX:YYY: Access denied (insufficient permission)":
-
-* A cheap and dirty hack is to run the following every time the device is plugged in, replacing XXX and YYY values to match those 
-included in the error message:
+**Permanent fix** via udev rule:
 ```bash
-sudo chmod 666  /dev/bus/usb/XXX/YYY
-```
-* A better option is to configure UDEV rules. Config has to be specific for your system, but is generally done as:
-```bash
-sudo -s
-echo 'SUBSYSTEM=="usb", ATTR{idProduct}=="8102", ATTRS{idVendor}=="8102", MODE="0666"' > /etc/udev/rules.d/99-OpenBuudai.rules
-^D
-```
-On Arch Linux, the same can be accomplished by adding permissions for the UUCP group:
-```bash
-sudo -s
-echo 'SUBSYSTEM=="usb", ATTR{idProduct}=="8102", ATTRS{idVendor}=="8102", GROUP="uucp"' > /etc/udev/rules.d/99-OpenBuudai.rules
-gpasswd -a YOUR_USER_NAME uucp
-^D
+echo 'SUBSYSTEM=="usb", ATTR{idProduct}=="8102", ATTRS{idVendor}=="8102", MODE="0666"' \
+    | sudo tee /etc/udev/rules.d/99-OpenBuudai.rules
+sudo udevadm control --reload-rules
 ```
 
-### OSX
+On Arch Linux (UUCP group):
+```bash
+echo 'SUBSYSTEM=="usb", ATTR{idProduct}=="8102", ATTRS{idVendor}=="8102", GROUP="uucp"' \
+    | sudo tee /etc/udev/rules.d/99-OpenBuudai.rules
+sudo gpasswd -a $USER uucp
+```
 
-ToDo
+## References
+
+- [Hardware teardown & discussion (360customs)](http://www.360customs.de/en/2014/10/usb-oszilloskop-sainsmart-dds120-2-kanal-20mhz-50msps-buudairocktech-bm102/)
+- [EEVblog forum thread](http://www.eevblog.com/forum/testgear/sainsmart-dds120-usb-oscilloscope-%28buudai-bm102%29/)
+- [Original OpenHantek](https://github.com/OpenHantek/openhantek)
+- [Original OpenBuudai](https://github.com/doctormord/OpenBuudai)
