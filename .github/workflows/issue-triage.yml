@@ -62,11 +62,10 @@ jobs:
           REPO: ${{ github.repository }}
           NUMBER: ${{ steps.meta.outputs.number }}
         run: |
-          gh api "repos/${REPO}/issues/${NUMBER}" > /tmp/issue.json
-          gh api "repos/${REPO}/issues/${NUMBER}/comments" > /tmp/comments.json
-          jq -r '.title' /tmp/issue.json > /tmp/issue_title.txt
-          jq -r '.body // ""' /tmp/issue.json > /tmp/issue_body.txt
-          jq -r '.[] | "[\(.user.login)]: \(.body)"' /tmp/comments.json | head -30 > /tmp/issue_comments.txt
+          gh issue view "$NUMBER" --repo "$REPO" --json title,body,comments > /tmp/issue_full.json
+          jq -r '.title' /tmp/issue_full.json > /tmp/issue_title.txt
+          jq -r '.body // ""' /tmp/issue_full.json > /tmp/issue_body.txt
+          jq -r '.comments[] | "[\(.author.login)]: \(.body)"' /tmp/issue_full.json | head -30 > /tmp/issue_comments.txt
 
       - name: Run Claude autofix agent
         id: claude
