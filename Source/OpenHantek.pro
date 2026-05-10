@@ -6,13 +6,12 @@ CONFIG += warn_on \
 QT += opengl printsupport openglwidgets
 
 
-INCLUDEPATH += C:/Qt/lib/libusb/include/ # Find .h files
-LIBS += -LC:/Qt/lib/libusb/MS32/dll/ -llibusb-1.0 # Find .lib files
-# LIBS += -LC:/Qt/lib/libusb/MS32/dll/ -lusb-1.0 # Find .lib files Linux Build
-
-INCLUDEPATH += C:/Qt/lib/fftw-3.3.4-dll32 # Find .h files
-LIBS += -LC:/Qt/lib/fftw-3.3.4-dll32/ -lfftw3-3 # Find .lib files
-# LIBS += -LC:/Qt/lib/fftw-3.3.4-dll32/ -lfftw3 # Find .lib files Linux Build
+win32 {
+    INCLUDEPATH += C:/Qt/lib/libusb/include/
+    LIBS += -LC:/Qt/lib/libusb/MS32/dll/ -llibusb-1.0
+    INCLUDEPATH += C:/Qt/lib/fftw-3.3.4-dll32
+    LIBS += -LC:/Qt/lib/fftw-3.3.4-dll32/ -lfftw3-3
+}
 
 # Source files
 SOURCES += src/colorbox.cpp \
@@ -99,13 +98,10 @@ MOC_DIR = build/moc
 # Include directory
 QMAKE_CXXFLAGS += "-iquote $${IN_PWD}/src"
 
-# libusb version
+# libusb version (0 = legacy libusb-0.1, 1 = libusb-1.0)
 LIBUSB_VERSION = $$(LIBUSB_VERSION)
 contains(LIBUSB_VERSION, 0): LIBS += -lusb
-else { 
-    LIBUSB_VERSION = 1
-#    LIBS += -lusb-1.0
-}
+else: LIBUSB_VERSION = 1
 DEFINES += LIBUSB_VERSION=$${LIBUSB_VERSION}
 
 # Debug output
@@ -114,14 +110,15 @@ CONFIG(debug, debug|release): DEFINES += DEBUG
 CONFIG += debug_and_release
 
 # Settings for different operating systems
-unix:!macx { 
+unix:!macx {
     isEmpty(PREFIX):PREFIX = /usr/local
     TARGET = openhantek
-    
+
     # Installation directories
     target.path = $${PREFIX}/bin
     translations.path = $${PREFIX}/share/apps/openhantek/translations
     INCLUDEPATH += /usr/include/libusb
+    LIBS += -lusb-1.0 -lfftw3
     DEFINES += QMAKE_TRANSLATIONS_PATH=\\\"$${translations.path}\\\" \
         OS_UNIX VERSION=\\\"$${VERSION}\\\"
 }
