@@ -84,8 +84,8 @@ bool Exporter::doExport() {
 		if(this->format < EXPORT_FORMAT_IMAGE) {
 			// We need a QPrinter for printing, pdf- and ps-export
 			paintDevice = new QPrinter(QPrinter::HighResolution);
-			((QPrinter *) paintDevice)->setOrientation(this->settings->view.zoom ? QPrinter::Portrait : QPrinter::Landscape);
-			((QPrinter *) paintDevice)->setPageMargins(20, 20, 20, 20, QPrinter::Millimeter);
+			((QPrinter *) paintDevice)->setPageOrientation(this->settings->view.zoom ? QPageLayout::Portrait : QPageLayout::Landscape);
+			((QPrinter *) paintDevice)->setPageMargins(QMarginsF(20, 20, 20, 20), QPageLayout::Millimeter);
 			
 			if(this->format == EXPORT_FORMAT_PRINTER) {
 				// Show the printing dialog
@@ -202,7 +202,7 @@ bool Exporter::doExport() {
 		}
 		
 		// Set DIVS_TIME x DIVS_VOLTAGE matrix for oscillograph
-		painter.setMatrix(QMatrix((paintDevice->width() - 1) / DIVS_TIME, 0, 0, -(scopeHeight - 1) / DIVS_VOLTAGE, (double) (paintDevice->width() - 1) / 2, (scopeHeight - 1) / 2 + lineHeight * 1.5), false);
+		painter.setTransform(QTransform((paintDevice->width() - 1) / DIVS_TIME, 0, 0, -(scopeHeight - 1) / DIVS_VOLTAGE, (double) (paintDevice->width() - 1) / 2, (scopeHeight - 1) / 2 + lineHeight * 1.5), false);
 		
 		// Draw the graphs
 		painter.setRenderHint(QPainter::Antialiasing);
@@ -276,7 +276,7 @@ bool Exporter::doExport() {
 			}
 			
 			// Set DIVS_TIME / zoomFactor x DIVS_VOLTAGE matrix for zoomed oscillograph
-			painter.setMatrix(QMatrix((paintDevice->width() - 1) / DIVS_TIME * zoomFactor, 0, 0, -(scopeHeight - 1) / DIVS_VOLTAGE, (double) (paintDevice->width() - 1) / 2 - zoomOffset * zoomFactor * (paintDevice->width() - 1) / DIVS_TIME, (scopeHeight - 1) * 1.5 + lineHeight * 4), false);
+			painter.setTransform(QTransform((paintDevice->width() - 1) / DIVS_TIME * zoomFactor, 0, 0, -(scopeHeight - 1) / DIVS_VOLTAGE, (double) (paintDevice->width() - 1) / 2 - zoomOffset * zoomFactor * (paintDevice->width() - 1) / DIVS_TIME, (scopeHeight - 1) * 1.5 + lineHeight * 4), false);
 		}
 		
 		this->dataAnalyzer->mutex()->unlock();
@@ -285,7 +285,7 @@ bool Exporter::doExport() {
 		painter.setRenderHint(QPainter::Antialiasing, false);
 		for(int zoomed = 0; zoomed < (this->settings->view.zoom ? 2 : 1); zoomed++) {
 			// Set DIVS_TIME x DIVS_VOLTAGE matrix for oscillograph
-			painter.setMatrix(QMatrix((paintDevice->width() - 1) / DIVS_TIME, 0, 0, -(scopeHeight - 1) / DIVS_VOLTAGE, (double) (paintDevice->width() - 1) / 2, (scopeHeight - 1) * (zoomed + 0.5) + lineHeight * 1.5 + lineHeight * 2.5 * zoomed), false);
+			painter.setTransform(QTransform((paintDevice->width() - 1) / DIVS_TIME, 0, 0, -(scopeHeight - 1) / DIVS_VOLTAGE, (double) (paintDevice->width() - 1) / 2, (scopeHeight - 1) * (zoomed + 0.5) + lineHeight * 1.5 + lineHeight * 2.5 * zoomed), false);
 			
 			// Grid lines
 			painter.setPen(colorValues->grid);

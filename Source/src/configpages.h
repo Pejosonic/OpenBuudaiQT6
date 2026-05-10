@@ -27,6 +27,15 @@
 #define CONFIGPAGES_H
 
 
+#include <QDoubleSpinBox>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QList>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QStringList>
+#include <QVBoxLayout>
 #include <QWidget>
 
 
@@ -38,8 +47,6 @@ class ColorBox;
 class DsoSettings;
 class QCheckBox;
 class QComboBox;
-class QSpinBox;
-class QStringList;
 class QLabel;
 
 

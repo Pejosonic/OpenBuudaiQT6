@@ -25,6 +25,7 @@
 #include <QApplication>
 #include <QLibraryInfo>
 #include <QLocale>
+#include <QSurfaceFormat>
 #include <QTranslator>
 
 
@@ -35,10 +36,17 @@
 int main(int argc, char *argv[]) {
 	Q_INIT_RESOURCE(application);
 
+	// Fixed-function OpenGL pipeline (glShadeModel, glLineStipple, etc.) requires
+	// the compatibility profile — must be set before QApplication is constructed.
+	QSurfaceFormat fmt;
+	fmt.setProfile(QSurfaceFormat::CompatibilityProfile);
+	fmt.setVersion(2, 1);
+	QSurfaceFormat::setDefaultFormat(fmt);
+
 	QApplication openHantekApplication(argc, argv);
 
 	QTranslator qtTranslator;
-	qtTranslator.load("qt_" + QLocale::system().name(), QLibraryInfo::location(QLibraryInfo::TranslationsPath));
+	qtTranslator.load("qt_" + QLocale::system().name(), QLibraryInfo::path(QLibraryInfo::TranslationsPath));
 	openHantekApplication.installTranslator(&qtTranslator);
 
 	QTranslator openHantekTranslator;

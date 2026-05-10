@@ -522,7 +522,7 @@ QRect LevelSlider::calculateRect(int sliderId) {
 		}
 		// Or a thin needle with text?
 		else {
-			int sliderLength = this->fontMetrics().size(0, this->slider[sliderId]->text).width() + 2;
+			int sliderLength = this->fontMetrics().boundingRect(this->slider[sliderId]->text).width() + 2;
 			this->slider[sliderId]->rect = QRect(
 				// The needle is at the right side, the text before it
 				(long) (this->width() - this->_preMargin - this->_postMargin - 1) * (this->slider[sliderId]->value - this->slider[sliderId]->minimum) / (this->slider[sliderId]->maximum - this->slider[sliderId]->minimum) + this->_preMargin - sliderLength + 1,
@@ -545,7 +545,7 @@ int LevelSlider::calculateWidth() {
 	// Is it a vertical slider?
 	if(this->_direction == Qt::RightArrow || this->_direction == Qt::LeftArrow) {
 		for(QList<LevelSliderParameters *>::iterator slider = this->slider.begin(); slider != this->slider.end(); ++slider) {
-			int sliderWidth = this->fontMetrics().size(0, (*slider)->text).width();
+			int sliderWidth = this->fontMetrics().boundingRect((*slider)->text).width();
 			if(sliderWidth > this->sliderWidth)
 				this->sliderWidth = sliderWidth;
 		}
@@ -553,7 +553,7 @@ int LevelSlider::calculateWidth() {
 	// Or a horizontal slider?
 	else {
 		for(QList<LevelSliderParameters *>::iterator slider = this->slider.begin(); slider != this->slider.end(); ++slider) {
-			int sliderWidth = this->fontMetrics().size(0, (*slider)->text).height();
+			int sliderWidth = this->fontMetrics().boundingRect((*slider)->text).height();
 			if(sliderWidth > this->sliderWidth)
 				this->sliderWidth = sliderWidth;
 		}

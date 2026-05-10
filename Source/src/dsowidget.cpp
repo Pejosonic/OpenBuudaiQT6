@@ -24,7 +24,9 @@
 
 #include <cmath>
 
+#include <QFileDialog>
 #include <QGridLayout>
+#include <QLabel>
 #include <QTimer>
 
 
@@ -52,7 +54,7 @@ DsoWidget::DsoWidget(DsoSettings *settings, DataAnalyzer *dataAnalyzer, QWidget 
 	
 	// Palette for this widget
 	QPalette palette;
-	palette.setColor(QPalette::Background, this->settings->view.color.screen.background);
+	palette.setColor(QPalette::Window, this->settings->view.color.screen.background);
 	palette.setColor(QPalette::WindowText, this->settings->view.color.screen.text);
 	
 	// The OpenGL accelerated scope widgets
@@ -233,7 +235,7 @@ DsoWidget::DsoWidget(DsoSettings *settings, DataAnalyzer *dataAnalyzer, QWidget 
 	
 	// The widget itself
 	this->setPalette(palette);
-	this->setBackgroundRole(QPalette::Background);
+	this->setBackgroundRole(QPalette::Window);
 	this->setAutoFillBackground(true);
 	this->setLayout(this->mainLayout);
 	
@@ -242,8 +244,8 @@ DsoWidget::DsoWidget(DsoSettings *settings, DataAnalyzer *dataAnalyzer, QWidget 
 	this->connect(this->triggerPositionSlider, SIGNAL(valueChanged(int, double)), this, SLOT(updateTriggerPosition(int, double)));
 	this->connect(this->triggerLevelSlider, SIGNAL(valueChanged(int, double)), this, SLOT(updateTriggerLevel(int, double)));
 	this->connect(this->markerSlider, SIGNAL(valueChanged(int, double)), this, SLOT(updateMarker(int, double)));
-	this->connect(this->markerSlider, SIGNAL(valueChanged(int, double)), this->mainScope, SLOT(updateGL()));
-	this->connect(this->markerSlider, SIGNAL(valueChanged(int, double)), this->zoomScope, SLOT(updateGL()));
+	this->connect(this->markerSlider, SIGNAL(valueChanged(int, double)), this->mainScope, SLOT(update()));
+	this->connect(this->markerSlider, SIGNAL(valueChanged(int, double)), this->zoomScope, SLOT(update()));
 	
 	// Connect other signals
 	this->connect(this->dataAnalyzer, SIGNAL(analyzed(unsigned int)), this, SLOT(dataAnalyzed()));

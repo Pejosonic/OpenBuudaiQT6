@@ -29,9 +29,9 @@
 #define GLGENERATOR_H
 
 
-#include <QGLWidget>
 #include <QList>
 #include <QObject>
+#include <QOpenGLFunctions>
 
 
 #include "dso.h"

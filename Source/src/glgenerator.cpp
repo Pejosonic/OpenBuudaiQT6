@@ -22,8 +22,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 
-#include <QGLWidget>
 #include <QMutex>
+#include <QOpenGLFunctions>
 
 
 #include "glgenerator.h"

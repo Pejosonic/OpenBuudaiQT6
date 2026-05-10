@@ -47,7 +47,7 @@ class DsoWidget : public QWidget {
 	Q_OBJECT
 	
 	public:
-		DsoWidget(DsoSettings *settings, DataAnalyzer *dataAnalyzer, QWidget *parent = 0, Qt::WindowFlags flags = 0);
+		DsoWidget(DsoSettings *settings, DataAnalyzer *dataAnalyzer, QWidget *parent = nullptr, Qt::WindowFlags flags = Qt::WindowFlags());
 		~DsoWidget();
 	
 	protected:

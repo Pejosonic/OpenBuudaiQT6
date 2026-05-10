@@ -52,7 +52,7 @@ class OpenHantekMainWindow : public QMainWindow {
 	Q_OBJECT
 
 	public:
-		OpenHantekMainWindow(QWidget *parent = 0, Qt::WindowFlags flags = 0);
+		OpenHantekMainWindow(QWidget *parent = nullptr, Qt::WindowFlags flags = Qt::WindowFlags());
 		~OpenHantekMainWindow();
 
 	protected:

@@ -29,6 +29,7 @@
 
 #include <QDockWidget>
 #include <QGridLayout>
+#include <QStringList>
 
 
 #include "dso.h"
@@ -48,7 +49,7 @@ class HorizontalDock : public QDockWidget {
 	Q_OBJECT
 	
 	public:
-		HorizontalDock(DsoSettings *settings, QWidget *parent = 0, Qt::WindowFlags flags = 0);
+		HorizontalDock(DsoSettings *settings, QWidget *parent = 0, Qt::WindowFlags flags = Qt::WindowFlags());
 		~HorizontalDock();
 		
 		int setFrequencybase(double timebase);
@@ -95,7 +96,7 @@ class TriggerDock : public QDockWidget {
 	Q_OBJECT
 	
 	public:
-		TriggerDock(DsoSettings *settings, const QStringList *specialTriggers, QWidget *parent = 0, Qt::WindowFlags flags = 0);
+		TriggerDock(DsoSettings *settings, const QStringList *specialTriggers, QWidget *parent = 0, Qt::WindowFlags flags = Qt::WindowFlags());
 		~TriggerDock();
 		
 		int setMode(Dso::TriggerMode mode);
@@ -142,7 +143,7 @@ class VoltageDock : public QDockWidget {
 	Q_OBJECT
 	
 	public:
-		VoltageDock(DsoSettings *settings, QWidget *parent = 0, Qt::WindowFlags flags = 0);
+		VoltageDock(DsoSettings *settings, QWidget *parent = 0, Qt::WindowFlags flags = Qt::WindowFlags());
 		~VoltageDock();
 		
 		int setCoupling(int channel, Dso::Coupling coupling);
@@ -188,7 +189,7 @@ class SpectrumDock : public QDockWidget {
 	Q_OBJECT
 	
 	public:
-		SpectrumDock(DsoSettings *settings, QWidget *parent = 0, Qt::WindowFlags flags = 0);
+		SpectrumDock(DsoSettings *settings, QWidget *parent = 0, Qt::WindowFlags flags = Qt::WindowFlags());
 		~SpectrumDock();
 		
 		int setMagnitude(int channel, double magnitude);

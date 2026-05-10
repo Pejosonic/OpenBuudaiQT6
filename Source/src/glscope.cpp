@@ -41,7 +41,7 @@
 /// \brief Initializes the scope widget.
 /// \param settings The settings that should be used.
 /// \param parent The parent widget.
-GlScope::GlScope(DsoSettings *settings, QWidget *parent) : QGLWidget(parent) {
+GlScope::GlScope(DsoSettings *settings, QWidget *parent) : QOpenGLWidget(parent) {
 	this->settings = settings;
 	
 	this->generator = 0;
@@ -54,17 +54,20 @@ GlScope::~GlScope() {
 
 /// \brief Initializes OpenGL output.
 void GlScope::initializeGL() {
+	initializeOpenGLFunctions();
+
 	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	
+
 	glPointSize(1);
-	
-	qglClearColor(this->settings->view.color.screen.background);
-	
+
+	const QColor &bg = this->settings->view.color.screen.background;
+	glClearColor(bg.redF(), bg.greenF(), bg.blueF(), bg.alphaF());
+
 	glShadeModel(GL_SMOOTH/*GL_FLAT*/);
 	glLineStipple(1, 0x3333);
-	
+
 	glEnableClientState(GL_VERTEX_ARRAY);
 }
 
@@ -72,11 +75,15 @@ void GlScope::initializeGL() {
 void GlScope::paintGL() {
 	if(!this->isVisible())
 		return;
-	
+
+	auto setColor = [](const QColor &c) {
+		glColor4f(c.redF(), c.greenF(), c.blueF(), c.alphaF());
+	};
+
 	// Clear OpenGL buffer and configure settings
 	glClear(GL_COLOR_BUFFER_BIT);
     glLineWidth(2);
-	
+
 	// Draw the graphs
 	if(this->generator && this->generator->digitalPhosphorDepth > 0) {
 		if(this->settings->view.antialiasing) {
@@ -110,9 +117,9 @@ void GlScope::paintGL() {
 							for(int index = this->generator->digitalPhosphorDepth - 1; index >= 0; index--) {
 								if(this->generator->vaChannel[mode][channel][index]->data) {
 									if(mode == Dso::CHANNELMODE_VOLTAGE)
-										this->qglColor(this->settings->view.color.screen.voltage[channel].darker(fadingFactor[index]));
+										setColor(this->settings->view.color.screen.voltage[channel].darker(fadingFactor[index]));
 									else
-										this->qglColor(this->settings->view.color.screen.spectrum[channel].darker(fadingFactor[index]));
+										setColor(this->settings->view.color.screen.spectrum[channel].darker(fadingFactor[index]));
 									glVertexPointer(2, GL_FLOAT, 0, this->generator->vaChannel[mode][channel][index]->data);
                                     glDrawArrays((this->settings->view.interpolation == Dso::INTERPOLATION_OFF) ? GL_POINTS : GL_LINE_STRIP, 0, this->generator->vaChannel[mode][channel][index]->getSize() / 2);
 								}
@@ -129,7 +136,7 @@ void GlScope::paintGL() {
 						// Draw graph for all available depths
                         for(int index = this->generator->digitalPhosphorDepth - 1; index >= 0; index--) {
 							if(this->generator->vaChannel[Dso::CHANNELMODE_VOLTAGE][channel][index]->data) {
-								this->qglColor(this->settings->view.color.screen.voltage[channel].darker(fadingFactor[index]));
+								setColor(this->settings->view.color.screen.voltage[channel].darker(fadingFactor[index]));
 								glVertexPointer(2, GL_FLOAT, 0, this->generator->vaChannel[Dso::CHANNELMODE_VOLTAGE][channel][index]->data);
                                 glDrawArrays((this->settings->view.interpolation == Dso::INTERPOLATION_OFF) ? GL_POINTS : GL_LINE_STRIP, 0, this->generator->vaChannel[Dso::CHANNELMODE_VOLTAGE][channel][index]->getSize() / 2);
 							}
@@ -158,7 +165,7 @@ void GlScope::paintGL() {
         glDisable(GL_POINT_SMOOTH);
         glDisable(GL_LINE_SMOOTH);
 
-		this->qglColor(this->settings->view.color.screen.markers);
+		setColor(this->settings->view.color.screen.markers);
 		
 		for(int marker = 0; marker < MARKER_COUNT; marker++) {
 			if(!this->vaMarker[marker].data) {
@@ -197,9 +204,9 @@ void GlScope::resizeGL(int width, int height) {
 /// \param generator Pointer to the GlGenerator class.
 void GlScope::setGenerator(GlGenerator *generator) {
 	if(this->generator)
-		disconnect(this->generator, SIGNAL(graphsGenerated()), this, SLOT(updateGL()));
+		disconnect(this->generator, SIGNAL(graphsGenerated()), this, SLOT(update()));
 	this->generator = generator;
-	connect(this->generator, SIGNAL(graphsGenerated()), this, SLOT(updateGL()));
+	connect(this->generator, SIGNAL(graphsGenerated()), this, SLOT(update()));
 }
 
 /// \brief Set the zoom mode for this GlScope.
@@ -210,21 +217,23 @@ void GlScope::setZoomMode(bool zoomed) {
 
 /// \brief Draw the grid.
 void GlScope::drawGrid() {
+	auto setColor = [](const QColor &c) {
+		glColor4f(c.redF(), c.greenF(), c.blueF(), c.alphaF());
+	};
 
 	glDisable(GL_POINT_SMOOTH);
 	glDisable(GL_LINE_SMOOTH);
 
-	
 	// Grid
-	this->qglColor(this->settings->view.color.screen.grid);
+	setColor(this->settings->view.color.screen.grid);
 	glVertexPointer(2, GL_FLOAT, 0, this->generator->vaGrid[0].data);
 	glDrawArrays(GL_POINTS, 0, this->generator->vaGrid[0].getSize() / 2);
 	// Axes
-	this->qglColor(this->settings->view.color.screen.axes);
+	setColor(this->settings->view.color.screen.axes);
 	glVertexPointer(2, GL_FLOAT, 0, this->generator->vaGrid[1].data);
 	glDrawArrays(GL_LINES, 0, this->generator->vaGrid[1].getSize() / 2);
 	// Border
-	this->qglColor(this->settings->view.color.screen.border);
+	setColor(this->settings->view.color.screen.border);
     glVertexPointer(2, GL_FLOAT, 0, this->generator->vaGrid[2].data);
 	glDrawArrays(GL_LINE_LOOP, 0, this->generator->vaGrid[2].getSize() / 2);
 }

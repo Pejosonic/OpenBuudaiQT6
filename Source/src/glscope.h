@@ -29,7 +29,8 @@
 #define GLSCOPE_H
 
 
-#include <QtOpenGL>
+#include <QOpenGLFunctions>
+#include <QOpenGLWidget>
 
 
 #include "glgenerator.h"
@@ -43,7 +44,7 @@ class DsoSettings;
 ////////////////////////////////////////////////////////////////////////////////
 /// \class GlScope                                                     glscope.h
 /// \brief OpenGL accelerated widget that displays the oscilloscope screen.
-class GlScope : public QGLWidget {
+class GlScope : public QOpenGLWidget, protected QOpenGLFunctions {
 	Q_OBJECT
 	
 	public:
