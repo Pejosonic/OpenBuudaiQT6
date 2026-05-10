@@ -1,0 +1,53 @@
+name: Build Linux
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build \
+            qt6-base-dev \
+            libqt6opengl6-dev \
+            qt6-tools-dev \
+            qt6-l10n-tools \
+            libgl-dev \
+            libusb-1.0-0-dev \
+            libfftw3-dev
+
+      - name: Configure
+        run: cmake -S Source -B build -G Ninja
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Rename binary
+        run: cp build/OpenBuudai build/OpenBuudai-linux-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenBuudai-linux-x86_64
+          path: build/OpenBuudai-linux-x86_64
+          retention-days: 30
+
+      - name: Publish to latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes 2>/dev/null || true
+          gh release create latest \
+            --title "Latest Linux build ($(git rev-parse --short HEAD))" \
+            --notes "Automatically built from commit $(git rev-parse HEAD)" \
+            --prerelease \
+            build/OpenBuudai-linux-x86_64
