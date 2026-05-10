@@ -143,8 +143,17 @@ namespace Buudai {
 
 		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
 		if (device->getModel() == MODEL_DDS140) {
-			// Arm the trigger
-			sendRequest(FIFO_CONTROL, 0x00);
+			// Arm the trigger — call controlTransfer directly so we can detect
+			// a STALL/IO error instead of silently ignoring it.
+			unsigned char armData = 0;
+			usbMutex.lock();
+			int armErr = device->controlTransfer(LIBUSB_REQUEST_TYPE_VENDOR, FIFO_CONTROL, &armData, 1, 0x00, 0, 1);
+			usbMutex.unlock();
+			if (armErr < 0) {
+				qDebug("DDS140: FIFO arm command (0x%02x) failed: %s",
+				       FIFO_CONTROL, Helper::libUsbErrorString(armErr).toLocal8Bit().data());
+				return armErr;
+			}
 
 			// Poll FIFO status until buffer is ready (0x21) or timeout
 			unsigned char status = 0;
@@ -154,8 +163,11 @@ namespace Buudai {
 					break;
 				usleep(1000);
 			}
-			if (status != BUUDAI_DDS140_FIFO_READY)
+			if (status != BUUDAI_DDS140_FIFO_READY) {
+				qDebug("DDS140: FIFO ready timeout, last status=0x%02x (want 0x%02x)",
+				       status, BUUDAI_DDS140_FIFO_READY);
 				return LIBUSB_ERROR_TIMEOUT;
+			}
 
 			// Read the fixed 131072-byte capture buffer from EP6.
 			// Clear any endpoint halt/stall that may have accumulated from a
