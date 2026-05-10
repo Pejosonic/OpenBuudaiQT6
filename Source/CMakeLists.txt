@@ -6,7 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets PrintSupport LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets PrintSupport)
+find_package(Qt6 OPTIONAL_COMPONENTS LinguistTools QUIET)
 
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
@@ -66,7 +67,14 @@ set(SOURCES
     src/dso.cpp
 )
 
-qt6_add_translation(QM_FILES translations/openhantek_de.ts)
+# Compile .ts -> .qm if LinguistTools is available; otherwise use the
+# pre-compiled .qm already present in the repo.
+if(Qt6LinguistTools_FOUND)
+    qt6_add_translation(QM_FILES translations/openhantek_de.ts)
+else()
+    message(STATUS "Qt6LinguistTools not available — using pre-compiled .qm file")
+    set(QM_FILES ${CMAKE_CURRENT_SOURCE_DIR}/translations/openhantek_de.qm)
+endif()
 
 add_executable(OpenBuudai
     ${SOURCES}
