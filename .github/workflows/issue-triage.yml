@@ -1,4 +1,4 @@
-name: Issue Triage
+name: Issue Triage & Auto-fix
 
 on:
   issues:
@@ -7,34 +7,43 @@ on:
     types: [created]
 
 permissions:
+  contents: write
   issues: write
 
 jobs:
   triage:
     runs-on: ubuntu-latest
-    # Skip comments made by the Actions bot to avoid feedback loops
     if: github.actor != 'github-actions[bot]'
 
     steps:
-      - name: Build context and call Claude
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Python deps
+        run: pip install anthropic
+
+      - name: Build prompt
+        id: prompt
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_STATE: ${{ github.event.issue.state }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           LABEL_NAME: ${{ github.event.label.name }}
           ASSIGNEE: ${{ github.event.assignee.login }}
         run: |
-          # Build a human-readable event description for Claude
           if [ "$EVENT_NAME" = "issue_comment" ]; then
-            USER_MSG="A new comment was posted on issue #${ISSUE_NUMBER}.
+            PROMPT="A new comment was added to issue #${ISSUE_NUMBER}.
 
 Issue title: ${ISSUE_TITLE}
 Issue body:
@@ -43,68 +52,111 @@ ${ISSUE_BODY}
 New comment by ${COMMENT_AUTHOR}:
 ${COMMENT_BODY}
 
-Respond to the comment if it adds new technical information or asks a question. If it is just a acknowledgement or off-topic, you can skip a detailed response — in that case reply with a single short sentence."
+If the comment describes a bug or provides new technical details that suggest a fix, attempt it.
+If it is just a question, answer it. If off-topic, write a brief acknowledgement only."
+
+          elif [ "$EVENT_ACTION" = "opened" ]; then
+            PROMPT="A new issue was opened (#${ISSUE_NUMBER}).
+
+Title: ${ISSUE_TITLE}
+
+Body:
+${ISSUE_BODY}
+
+Analyse the issue. If it describes a clear, small bug you can fix by editing source files, fix it.
+Otherwise explain the problem and suggest manual next steps."
 
           elif [ "$EVENT_ACTION" = "closed" ]; then
-            USER_MSG="Issue #${ISSUE_NUMBER} was just closed.
-
-Issue title: ${ISSUE_TITLE}
-Issue body:
-${ISSUE_BODY}
-
-Write a brief closing note: summarise what the issue was about and, if it can be inferred, what likely resolved it. Keep it to 2-3 sentences."
+            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') was just closed. Write a brief 2-sentence closing summary. Do not attempt any code fix."
 
           elif [ "$EVENT_ACTION" = "reopened" ]; then
-            USER_MSG="Issue #${ISSUE_NUMBER} was just reopened.
-
-Issue title: ${ISSUE_TITLE}
-Issue body:
-${ISSUE_BODY}
-
-Acknowledge the reopen, note that the problem may not have been fully resolved, and suggest the reporter include any new details that differ from the original report."
+            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') was reopened. Acknowledge this and ask the reporter to provide any new details. Do not attempt a code fix."
 
           elif [ "$EVENT_ACTION" = "labeled" ]; then
-            USER_MSG="Issue #${ISSUE_NUMBER} was labeled '${LABEL_NAME}'.
-
-Issue title: ${ISSUE_TITLE}
-Issue body:
-${ISSUE_BODY}
-
-Write one short sentence acknowledging the label and what it means for the issue's priority or category. Do not add a long analysis — just a brief acknowledgement."
+            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') was labeled '${LABEL_NAME}'. Write one sentence acknowledging the label. Do not attempt a code fix."
 
           elif [ "$EVENT_ACTION" = "assigned" ]; then
-            USER_MSG="Issue #${ISSUE_NUMBER} was assigned to ${ASSIGNEE}.
-
-Issue title: ${ISSUE_TITLE}
-Issue body:
-${ISSUE_BODY}
-
-Write one short sentence acknowledging the assignment."
+            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') was assigned to ${ASSIGNEE}. Write one sentence acknowledging the assignment. Do not attempt a code fix."
 
           else
-            # opened
-            USER_MSG="A new issue was opened.
-
-Issue title: ${ISSUE_TITLE}
-Issue body:
-${ISSUE_BODY}
-
-Provide: 1) a brief diagnosis, 2) likely cause, 3) suggested next steps or workaround."
+            PROMPT="Issue #${ISSUE_NUMBER} ('${ISSUE_TITLE}') had action '${EVENT_ACTION}'. Write a brief acknowledgement."
           fi
 
-          RESPONSE=$(curl -sf https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "$(jq -n --arg msg "$USER_MSG" '{
-              model: "claude-haiku-4-5-20251001",
-              max_tokens: 1024,
-              system: "You are a helpful assistant triaging GitHub issues for OpenBuudaiQT6, an open-source Qt6 oscilloscope application for Buudai/SainSmart USB oscilloscopes (DDS120, DDS140). Be concise and technical. Do not use excessive markdown. Always end responses with a note that this is an automated analysis.",
-              messages: [{ role: "user", content: $msg }]
-            }')")
+          # Write prompt to file to avoid shell quoting issues
+          printf '%s' "$PROMPT" > /tmp/prompt.txt
+          echo "number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
 
-          COMMENT=$(echo "$RESPONSE" | jq -r '.content[0].text')
+      - name: Run Claude autofix agent
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          export PROMPT="$(cat /tmp/prompt.txt)"
+          python3 .github/scripts/autofix.py > /tmp/result.json
+          echo "attempted_fix=$(jq -r '.attempted_fix' /tmp/result.json)" >> "$GITHUB_OUTPUT"
 
-          gh issue comment "$ISSUE_NUMBER" \
+      - name: Commit and push if fix is simple
+        id: push
+        if: steps.claude.outputs.attempted_fix == 'true'
+        run: |
+          FILES=$(git diff --name-only | wc -l)
+          LINES=$(git diff --shortstat | grep -oP '\d+ insertion' | grep -oP '\d+' || echo 0)
+          LINES=$((LINES + $(git diff --shortstat | grep -oP '\d+ deletion' | grep -oP '\d+' || echo 0)))
+
+          echo "Changed files: $FILES, lines: $LINES"
+
+          if [ "$FILES" -le 3 ] && [ "$LINES" -le 50 ]; then
+            BRANCH="autofix/issue-${{ steps.prompt.outputs.number }}"
+            git checkout -b "$BRANCH"
+            git add -u
+            git commit -m "Auto-fix: issue #${{ steps.prompt.outputs.number }}
+
+Applied by Claude based on issue report.
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+            git push origin "$BRANCH"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+            echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            git checkout -- .  # discard — too large for auto-push
+          fi
+
+      - name: Build final comment
+        run: |
+          BASE_COMMENT=$(jq -r '.comment' /tmp/result.json)
+
+          if [ "${{ steps.push.outputs.pushed }}" = "true" ]; then
+            BRANCH="${{ steps.push.outputs.branch }}"
+            DIFF_SUMMARY=$(git diff origin/master..."$BRANCH" --stat 2>/dev/null || echo "")
+            EXTRA="
+
+---
+**Auto-fix pushed** to branch \`${BRANCH}\`.
+\`\`\`
+${DIFF_SUMMARY}
+\`\`\`
+Please review and merge if correct."
+
+          elif [ "${{ steps.claude.outputs.attempted_fix }}" = "true" ]; then
+            DIFF=$(git diff -- '*.cpp' '*.h' '*.cmake' 'CMakeLists.txt' | head -200)
+            EXTRA="
+
+---
+**A fix was drafted but is too large to auto-push** (>3 files or >50 lines). Proposed diff (truncated to 200 lines):
+\`\`\`diff
+${DIFF}
+\`\`\`"
+          else
+            EXTRA=""
+          fi
+
+          printf '%s%s' "$BASE_COMMENT" "$EXTRA" > /tmp/final_comment.txt
+
+      - name: Post comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue comment "${{ steps.prompt.outputs.number }}" \
             --repo "$REPO" \
-            --body "$COMMENT"
+            --body "$(cat /tmp/final_comment.txt)"
