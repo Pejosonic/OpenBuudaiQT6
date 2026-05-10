@@ -1,4 +1,4 @@
-name: Issue Triage & Auto-fix
+name: Issue Triage and Auto-fix
 
 on:
   issues:
@@ -19,11 +19,13 @@ permissions:
 jobs:
   triage:
     runs-on: ubuntu-latest
-    if: |
+    if: >
       github.actor != 'github-actions[bot]' &&
       (github.event_name == 'workflow_dispatch' ||
-       github.event.issue.user.login == 'pejosonic' || github.event.issue.user.login == 'luncheonticket' ||
-       github.event.comment.user.login == 'pejosonic' || github.event.comment.user.login == 'luncheonticket')
+       github.event.issue.user.login == 'pejosonic' ||
+       github.event.issue.user.login == 'luncheonticket' ||
+       github.event.comment.user.login == 'pejosonic' ||
+       github.event.comment.user.login == 'luncheonticket')
 
     steps:
       - uses: actions/checkout@v4
@@ -42,8 +44,6 @@ jobs:
       - name: Resolve issue number
         id: meta
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           DISPATCH_NUMBER: ${{ github.event.inputs.issue_number }}
           EVENT_NUMBER: ${{ github.event.issue.number }}
@@ -64,14 +64,9 @@ jobs:
         run: |
           gh api "repos/${REPO}/issues/${NUMBER}" > /tmp/issue.json
           gh api "repos/${REPO}/issues/${NUMBER}/comments" > /tmp/comments.json
-
-          TITLE=$(jq -r '.title' /tmp/issue.json)
-          BODY=$(jq -r '.body // ""' /tmp/issue.json)
-          COMMENTS=$(jq -r '.[] | "[\(.user.login)]: \(.body)"' /tmp/comments.json | head -30)
-
-          echo "title=${TITLE}" >> "$GITHUB_OUTPUT"
-          printf '%s' "$BODY" > /tmp/issue_body.txt
-          printf '%s' "$COMMENTS" > /tmp/issue_comments.txt
+          jq -r '.title' /tmp/issue.json > /tmp/issue_title.txt
+          jq -r '.body // ""' /tmp/issue.json > /tmp/issue_body.txt
+          jq -r '.[] | "[\(.user.login)]: \(.body)"' /tmp/comments.json | head -30 > /tmp/issue_comments.txt
 
       - name: Run Claude autofix agent
         id: claude
@@ -80,15 +75,15 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           ISSUE_NUMBER: ${{ steps.meta.outputs.number }}
-          ISSUE_TITLE: ${{ github.event_name == 'workflow_dispatch' && steps.fetch.outputs.title || github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event_name != 'workflow_dispatch' && github.event.issue.body || '' }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           LABEL_NAME: ${{ github.event.label.name }}
           ASSIGNEE: ${{ github.event.assignee.login }}
         run: |
-          # For manual dispatch, load body and comments from files written above
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            export ISSUE_TITLE="$(cat /tmp/issue_title.txt)"
             export ISSUE_BODY="$(cat /tmp/issue_body.txt)"
             export ISSUE_COMMENTS="$(cat /tmp/issue_comments.txt)"
           fi
@@ -122,33 +117,23 @@ jobs:
           REPO: ${{ github.repository }}
           PUSHED: ${{ steps.push.outputs.pushed }}
           ATTEMPTED: ${{ steps.claude.outputs.attempted_fix }}
+          NUMBER: ${{ steps.meta.outputs.number }}
         run: |
           COMMENT=$(jq -r '.comment' /tmp/result.json)
 
           if [ "$PUSHED" = "true" ]; then
-            STAT=$(git show --stat HEAD 2>/dev/null || echo "")
-            FOOTER="---
-**Auto-fix committed to master.**
-\`\`\`
-${STAT}
-\`\`\`"
+            git show --stat HEAD 2>/dev/null > /tmp/stat.txt || true
+            printf '\n\n---\n**Auto-fix committed to master.**\n```\n%s\n```' \
+              "$(cat /tmp/stat.txt)" >> /tmp/result_comment.txt
           elif [ "$ATTEMPTED" = "true" ]; then
-            DIFF=$(git diff -- '*.cpp' '*.h' 'CMakeLists.txt' | head -200)
-            FOOTER="---
-**Fix drafted but too large to auto-push** (>3 files or >50 lines). Proposed diff:
-\`\`\`diff
-${DIFF}
-\`\`\`"
+            git diff -- '*.cpp' '*.h' 'CMakeLists.txt' | head -200 > /tmp/diff.txt
+            printf '\n\n---\n**Fix drafted but too large to auto-push** (>3 files or >50 lines).\n```diff\n%s\n```' \
+              "$(cat /tmp/diff.txt)" > /tmp/footer.txt
+            printf '%s%s' "$COMMENT" "$(cat /tmp/footer.txt)" > /tmp/result_comment.txt
           else
-            FOOTER=""
+            printf '%s' "$COMMENT" > /tmp/result_comment.txt
           fi
 
-          if [ -n "$FOOTER" ]; then
-            printf '%s\n\n%s' "$COMMENT" "$FOOTER" > /tmp/final_comment.txt
-          else
-            printf '%s' "$COMMENT" > /tmp/final_comment.txt
-          fi
-
-          gh issue comment "${{ steps.meta.outputs.number }}" \
+          gh issue comment "$NUMBER" \
             --repo "$REPO" \
-            --body "$(cat /tmp/final_comment.txt)"
+            --body "$(cat /tmp/result_comment.txt)"
