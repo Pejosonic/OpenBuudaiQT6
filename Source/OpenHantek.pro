@@ -3,7 +3,7 @@ TEMPLATE = app
 # Configuration
 CONFIG += warn_on \
     qt
-QT += opengl printsupport
+QT += opengl printsupport openglwidgets
 
 
 INCLUDEPATH += C:/Qt/lib/libusb/include/ # Find .h files
