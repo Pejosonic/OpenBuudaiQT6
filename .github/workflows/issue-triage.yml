@@ -5,6 +5,12 @@ on:
     types: [opened, closed, reopened, labeled, assigned]
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to process'
+        required: true
+        type: number
 
 permissions:
   contents: write
@@ -15,7 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.actor != 'github-actions[bot]' &&
-      (github.event.issue.user.login == 'pejosonic' || github.event.issue.user.login == 'luncheonticket' ||
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.issue.user.login == 'pejosonic' || github.event.issue.user.login == 'luncheonticket' ||
        github.event.comment.user.login == 'pejosonic' || github.event.comment.user.login == 'luncheonticket')
 
     steps:
@@ -35,16 +42,41 @@ jobs:
       - name: Build prompt
         id: prompt
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.issue_number || github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           LABEL_NAME: ${{ github.event.label.name }}
           ASSIGNEE: ${{ github.event.assignee.login }}
+          REPO: ${{ github.repository }}
         run: |
+          # For manual runs, fetch issue data via gh
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            ISSUE_JSON=$(gh api repos/${REPO}/issues/${ISSUE_NUMBER})
+            ISSUE_TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
+            ISSUE_BODY=$(echo "$ISSUE_JSON" | jq -r '.body // ""')
+            COMMENTS=$(gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments \
+              | jq -r '.[] | "**\(.user.login):** \(.body)"' | head -20)
+            PROMPT="Manual triage of issue #${ISSUE_NUMBER}.
+
+Title: ${ISSUE_TITLE}
+
+Body:
+${ISSUE_BODY}
+
+Existing comments:
+${COMMENTS}
+
+Analyse the full issue including all comments. Attempt a fix if the problem is clear and small."
+            printf '%s' "$PROMPT" > /tmp/prompt.txt
+            echo "number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [ "$EVENT_NAME" = "issue_comment" ]; then
             PROMPT="A new comment was added to issue #${ISSUE_NUMBER}.
 
