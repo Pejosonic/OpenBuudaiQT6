@@ -90,7 +90,7 @@ namespace Buudai {
 	{
 	    unsigned char data = 0;
 		usbMutex.lock();
-		device->controlTransfer(0, request, &data, 1, value, 0, 1);
+		device->controlTransfer(LIBUSB_REQUEST_TYPE_VENDOR, request, &data, 1, value, 0, 1);
 		usbMutex.unlock();
 	    return data;
 
@@ -200,7 +200,7 @@ namespace Buudai {
 		unsigned char data[dataLength];
 		usbMutex.lock();
 		unsigned char res = 0;
-        device->controlTransfer(0, (unsigned char)FIFO_CONTROL, &res, 1, (unsigned char)FIFO_CONTROL_CLEAR, 0, 1);
+        device->controlTransfer(LIBUSB_REQUEST_TYPE_VENDOR, (unsigned char)FIFO_CONTROL, &res, 1, (unsigned char)FIFO_CONTROL_CLEAR, 0, 1);
         errorCode = device->bulkReadMulti(data, dataLength, 3);
 
 		usbMutex.unlock();
