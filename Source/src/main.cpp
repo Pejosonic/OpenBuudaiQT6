@@ -46,11 +46,11 @@ int main(int argc, char *argv[]) {
 	QApplication openHantekApplication(argc, argv);
 
 	QTranslator qtTranslator;
-	qtTranslator.load("qt_" + QLocale::system().name(), QLibraryInfo::path(QLibraryInfo::TranslationsPath));
+	(void)qtTranslator.load("qt_" + QLocale::system().name(), QLibraryInfo::path(QLibraryInfo::TranslationsPath));
 	openHantekApplication.installTranslator(&qtTranslator);
 
 	QTranslator openHantekTranslator;
-	openHantekTranslator.load("openhantek_" + QLocale::system().name(), QMAKE_TRANSLATIONS_PATH);
+	(void)openHantekTranslator.load("openhantek_" + QLocale::system().name(), QMAKE_TRANSLATIONS_PATH);
 	openHantekApplication.installTranslator(&openHantekTranslator);
 
 	OpenHantekMainWindow *openHantekMainWindow = new OpenHantekMainWindow();
