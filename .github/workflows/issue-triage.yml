@@ -106,10 +106,9 @@ jobs:
           echo "Changed files: $FILES, lines: $LINES"
           if [ "$FILES" -le 3 ] && [ "$LINES" -le 50 ]; then
             git add -u
-            git commit -m "Auto-fix: issue #${{ steps.meta.outputs.number }}
-
-Applied by Claude based on issue report.
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+            printf 'Auto-fix: issue #%s\n\nApplied by Claude based on issue report.\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>' \
+              "${{ steps.meta.outputs.number }}" > /tmp/commit_msg.txt
+            git commit -F /tmp/commit_msg.txt
             git push origin master
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           else
