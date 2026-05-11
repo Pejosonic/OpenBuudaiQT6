@@ -61,6 +61,23 @@ cmake -S Source -B build -G Ninja
 cmake --build build
 ```
 
+### Linux (qmake — alternative)
+
+The legacy qmake build is also supported via `Source/OpenHantek.pro`:
+
+```bash
+sudo apt-get install qt6-base-dev qt6-base-dev-tools \
+    libusb-1.0-0-dev libfftw3-dev
+
+cd Source
+qmake6 PREFIX=$HOME/.local
+make clean
+make
+make install
+```
+
+> **Note:** `qt6-base-dev` on Debian 13 ships `qmake6` but not `qmake`. Use `qmake6` explicitly.
+
 ### macOS (Homebrew)
 
 ```bash

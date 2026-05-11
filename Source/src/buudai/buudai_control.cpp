@@ -90,7 +90,7 @@ namespace Buudai {
 	{
 	    unsigned char data = 0;
 		usbMutex.lock();
-		device->controlTransfer(LIBUSB_REQUEST_TYPE_VENDOR, request, &data, 1, value, 0, 1);
+		device->controlTransfer(LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_IN, request, &data, 1, value, 0, 1);
 		usbMutex.unlock();
 	    return data;
 
@@ -143,17 +143,17 @@ namespace Buudai {
 
 		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
 		if (device->getModel() == MODEL_DDS140) {
-			// Arm the trigger — call controlTransfer directly so we can detect
-			// a STALL/IO error instead of silently ignoring it.
+			// Arm the trigger via vendor-class OUT (write) request.
+			// DDS140 firmware may not implement cmd 0x33; if it rejects it
+			// (IO error / stall) we continue to poll FIFO_STATUS anyway, because
+			// the device may arm automatically after initialisation.
 			unsigned char armData = 0;
 			usbMutex.lock();
 			int armErr = device->controlTransfer(LIBUSB_REQUEST_TYPE_VENDOR, FIFO_CONTROL, &armData, 1, 0x00, 0, 1);
 			usbMutex.unlock();
-			if (armErr < 0) {
-				qDebug("DDS140: FIFO arm command (0x%02x) failed: %s",
+			if (armErr < 0)
+				qDebug("DDS140: arm hint (cmd 0x%02x) returned \"%s\", proceeding to FIFO poll",
 				       FIFO_CONTROL, Helper::libUsbErrorString(armErr).toLocal8Bit().data());
-				return armErr;
-			}
 
 			// Poll FIFO status until buffer is ready (0x21) or timeout
 			unsigned char status = 0;

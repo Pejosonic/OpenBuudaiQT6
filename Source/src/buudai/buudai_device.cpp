@@ -411,7 +411,7 @@ namespace Buudai {
 #if LIBUSB_VERSION == 0
 			errorCode = usb_control_msg(this->handle, type | LIBUSB_ENDPOINT_IN, request, value, index, (char *) data, length, BUUDAI_TIMEOUT);
 #else
-			errorCode = libusb_control_transfer(this->handle, type | LIBUSB_ENDPOINT_IN, request, value, index, data, length, BUUDAI_TIMEOUT);
+			errorCode = libusb_control_transfer(this->handle, type, request, value, index, data, length, BUUDAI_TIMEOUT);
 #endif
 		
 		if(errorCode == LIBUSB_ERROR_NO_DEVICE)
