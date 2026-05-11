@@ -186,6 +186,11 @@ namespace Buudai {
 
 			errorCode = libusb_open(device, &(this->handle));
 			if(errorCode == LIBUSB_SUCCESS) {
+				// Detach any kernel driver that may have claimed the interface so
+				// that bulk transfers on the data endpoints succeed.  Control
+				// transfers on EP0 work even with a kernel driver attached, which
+				// is why FIFO status polls succeed while bulk reads return -EIO.
+				libusb_set_auto_detach_kernel_driver(this->handle, 1);
 				libusb_config_descriptor *configDescriptor;
 				const libusb_interface *interface;
 				const libusb_interface_descriptor *interfaceDescriptor;
