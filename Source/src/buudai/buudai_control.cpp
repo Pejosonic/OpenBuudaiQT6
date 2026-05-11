@@ -172,10 +172,16 @@ namespace Buudai {
 			// Read the fixed 131072-byte capture buffer from EP6.
 			// Clear any endpoint halt/stall that may have accumulated from a
 			// prior failed transfer (libusb returns LIBUSB_ERROR_IO otherwise).
+			// On some host controllers LIBUSB_ERROR_IO can also occur transiently
+			// after a stall; retry once with a fresh clearHalt in that case.
 			static unsigned char dds140_buf[BUUDAI_DDS140_BUFFER_SIZE];
 			usbMutex.lock();
 			device->clearHalt(BUUDAI_DDS140_EP_IN);
 			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
+			if (errorCode == LIBUSB_ERROR_IO) {
+				device->clearHalt(BUUDAI_DDS140_EP_IN);
+				errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
+			}
 			usbMutex.unlock();
 
 			if (errorCode < 0)
