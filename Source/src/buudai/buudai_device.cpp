@@ -205,10 +205,15 @@ namespace Buudai {
 					
 					interfaceDescriptor = &interface->altsetting[0];
 
+					// Accept any vendor-specific interface with at least 2 endpoints.
+					// Some DDS140 firmware revisions expose only 2 endpoints; the
+					// previous hard-coded == 4 check caused silent failure: the
+					// interface was never claimed but handle stayed open, so
+					// isConnected() returned true and all bulk reads timed out.
 					if (interfaceDescriptor->bInterfaceClass == LIBUSB_CLASS_VENDOR_SPEC &&
 							interfaceDescriptor->bInterfaceSubClass == 0 &&
 							interfaceDescriptor->bInterfaceProtocol == 0 &&
-							interfaceDescriptor->bNumEndpoints == 4) {
+							interfaceDescriptor->bNumEndpoints >= 2) {
 						// That's the interface we need, claim it
 						errorCode = libusb_claim_interface(this->handle, interfaceDescriptor->bInterfaceNumber);
 						if(errorCode < 0) {
@@ -218,7 +223,7 @@ namespace Buudai {
 						}
 						else {
 							this->interface = interfaceDescriptor->bInterfaceNumber;
-							
+
 							// Check the maximum endpoint packet size
 							const libusb_endpoint_descriptor *endpointDescriptor;
 							this->outPacketLength = 0;
@@ -233,13 +238,28 @@ namespace Buudai {
 								else if (addr == epIn)
 									this->inPacketLength = endpointDescriptor->wMaxPacketSize;
 							}
+							qDebug("Claimed interface %d: %d endpoints, EP_OUT=0x%02x pkt=%d  EP_IN=0x%02x pkt=%d",
+							       this->interface, interfaceDescriptor->bNumEndpoints,
+							       epOut, this->outPacketLength, epIn, this->inPacketLength);
 							message = tr("Device found: Buudai %1 (%2)").arg(this->modelStrings[this->model], deviceAddress);
 
 							emit connected();
 						}
 					}
 				}
-				
+
+				// No matching interface found — close the handle so that isConnected()
+				// returns false instead of silently proceeding with an unclaimed interface.
+				if (this->interface == -1 && this->handle) {
+					qDebug("No vendor-spec interface with >=2 endpoints found on %s; "
+					       "run 'lsusb -v -d %04x:%04x' and report the bNumEndpoints value",
+					       deviceAddress.toLocal8Bit().data(),
+					       this->descriptor.idVendor, this->descriptor.idProduct);
+					libusb_close(this->handle);
+					this->handle = 0;
+					message = tr("No suitable interface found on device %1 — please report 'lsusb -v' output").arg(deviceAddress);
+				}
+
 				libusb_free_config_descriptor(configDescriptor);
 			}
 			else {
