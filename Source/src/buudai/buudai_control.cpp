@@ -168,6 +168,7 @@ namespace Buudai {
 				       status, BUUDAI_DDS140_FIFO_READY);
 				return LIBUSB_ERROR_TIMEOUT;
 			}
+			qDebug("DDS140: FIFO ready (status=0x%02x), attempting EP6 bulk read", status);
 
 			// Read the fixed 131072-byte capture buffer from EP6.
 			// Clear any endpoint halt/stall that may have accumulated from a
@@ -184,8 +185,11 @@ namespace Buudai {
 			}
 			usbMutex.unlock();
 
-			if (errorCode < 0)
+			if (errorCode < 0) {
+				qDebug("DDS140: EP6 bulk read failed: %s (code %d)",
+				       Helper::libUsbErrorString(errorCode).toLocal8Bit().data(), errorCode);
 				return errorCode;
+			}
 
 			if (process) {
 				unsigned long int channelDataCount =
