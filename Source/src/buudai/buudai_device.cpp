@@ -319,7 +319,8 @@ namespace Buudai {
 		
 		int errorCode = LIBUSB_ERROR_TIMEOUT;
 		int transferred;
-		for(int attempt = 0; (attempt < attempts || attempts == -1) && errorCode == LIBUSB_ERROR_TIMEOUT; attempt++)
+		for(int attempt = 0; (attempt < attempts || attempts == -1) &&
+				(errorCode == LIBUSB_ERROR_TIMEOUT || errorCode == LIBUSB_ERROR_IO); attempt++)
 			errorCode = libusb_bulk_transfer(this->handle, endpoint, data, length, &transferred, BUUDAI_TIMEOUT);
 		
 		if(errorCode == LIBUSB_ERROR_NO_DEVICE)

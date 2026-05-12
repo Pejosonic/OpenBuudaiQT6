@@ -143,17 +143,11 @@ namespace Buudai {
 
 		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
 		if (device->getModel() == MODEL_DDS140) {
-			// Arm the trigger via vendor-class OUT (write) request.
-			// DDS140 firmware may not implement cmd 0x33; if it rejects it
-			// (IO error / stall) we continue to poll FIFO_STATUS anyway, because
-			// the device may arm automatically after initialisation.
-			unsigned char armData = 0;
-			usbMutex.lock();
-			int armErr = device->controlTransfer(LIBUSB_REQUEST_TYPE_VENDOR, FIFO_CONTROL, &armData, 1, 0x00, 0, 1);
-			usbMutex.unlock();
-			if (armErr < 0)
-				qDebug("DDS140: arm hint (cmd 0x%02x) returned \"%s\", proceeding to FIFO poll",
-				       FIFO_CONTROL, Helper::libUsbErrorString(armErr).toLocal8Bit().data());
+			// Arm the trigger: same IN direction as every other DDS140 command.
+			// The FX2 firmware only handles 0x33 as a device-to-host (IN) request;
+			// using OUT left EP6 unprimed, causing EPROTO on the subsequent bulk read.
+			unsigned char armResp = sendRequest(FIFO_CONTROL, 0x00);
+			qDebug("DDS140: arm cmd 0x%02x response=0x%02x", FIFO_CONTROL, armResp);
 
 			// Poll FIFO status until buffer is ready (0x21) or timeout.
 			// Log every status transition so users can diagnose firmware variants
@@ -187,7 +181,7 @@ namespace Buudai {
 			usbMutex.lock();
 			device->clearHalt(BUUDAI_DDS140_EP_IN);
 			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
-			if (errorCode == LIBUSB_ERROR_IO) {
+			if (errorCode == LIBUSB_ERROR_IO || errorCode == LIBUSB_ERROR_PIPE) {
 				device->clearHalt(BUUDAI_DDS140_EP_IN);
 				errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
 			}
