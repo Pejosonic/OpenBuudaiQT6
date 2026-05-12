@@ -10,7 +10,7 @@ Originally based on [OpenHantek](https://github.com/OpenHantek/openhantek) by Ol
 |--------|--------|
 | SainSmart DDS120 | Supported |
 | Buudai / Rocktech BM102 | Supported |
-| SainSmart DDS140 | Untested |
+| SainSmart DDS140 | Experimental (see [#2](https://github.com/Pejosonic/OpenBuudaiQT6/issues/2)) |
 
 ## Download
 
@@ -109,16 +109,16 @@ If the status bar shows `Couldn't open device XXX:YYY: Access denied`:
 sudo chmod 666 /dev/bus/usb/XXX/YYY
 ```
 
-**Permanent fix** via udev rule:
+**Permanent fix** via udev rule (covers both DDS120 and DDS140):
 ```bash
-echo 'SUBSYSTEM=="usb", ATTR{idProduct}=="8102", ATTRS{idVendor}=="8102", MODE="0666"' \
+printf 'SUBSYSTEM=="usb", ATTRS{idVendor}=="8102", ATTRS{idProduct}=="8102", MODE="0666"\nSUBSYSTEM=="usb", ATTRS{idVendor}=="8312", ATTRS{idProduct}=="8312", MODE="0666"\n' \
     | sudo tee /etc/udev/rules.d/99-OpenBuudai.rules
-sudo udevadm control --reload-rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 On Arch Linux (UUCP group):
 ```bash
-echo 'SUBSYSTEM=="usb", ATTR{idProduct}=="8102", ATTRS{idVendor}=="8102", GROUP="uucp"' \
+printf 'SUBSYSTEM=="usb", ATTRS{idVendor}=="8102", ATTRS{idProduct}=="8102", GROUP="uucp"\nSUBSYSTEM=="usb", ATTRS{idVendor}=="8312", ATTRS{idProduct}=="8312", GROUP="uucp"\n' \
     | sudo tee /etc/udev/rules.d/99-OpenBuudai.rules
 sudo gpasswd -a $USER uucp
 ```

@@ -155,16 +155,24 @@ namespace Buudai {
 				qDebug("DDS140: arm hint (cmd 0x%02x) returned \"%s\", proceeding to FIFO poll",
 				       FIFO_CONTROL, Helper::libUsbErrorString(armErr).toLocal8Bit().data());
 
-			// Poll FIFO status until buffer is ready (0x21) or timeout
+			// Poll FIFO status until buffer is ready (0x21) or timeout.
+			// Log every status transition so users can diagnose firmware variants
+			// that report readiness differently (file a bug with this output).
 			unsigned char status = 0;
+			unsigned char lastLoggedStatus = 0xff;
 			for (int poll = 0; poll < BUUDAI_DDS140_POLL_TIMEOUT; poll++) {
 				status = sendRequest(FIFO_STATUS, 0x00);
+				if (status != lastLoggedStatus) {
+					qDebug("DDS140: FIFO status → 0x%02x at poll %d", status, poll);
+					lastLoggedStatus = status;
+				}
 				if (status == BUUDAI_DDS140_FIFO_READY)
 					break;
 				usleep(1000);
 			}
 			if (status != BUUDAI_DDS140_FIFO_READY) {
-				qDebug("DDS140: FIFO ready timeout, last status=0x%02x (want 0x%02x)",
+				qDebug("DDS140: FIFO ready timeout, last status=0x%02x (want 0x%02x); "
+				       "report the status values above at https://github.com/Pejosonic/OpenBuudaiQT6/issues/2",
 				       status, BUUDAI_DDS140_FIFO_READY);
 				return LIBUSB_ERROR_TIMEOUT;
 			}
