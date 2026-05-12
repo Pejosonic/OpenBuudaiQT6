@@ -173,17 +173,21 @@ namespace Buudai {
 			qDebug("DDS140: FIFO ready (status=0x%02x), attempting EP6 bulk read", status);
 
 			// Read the fixed 131072-byte capture buffer from EP6.
-			// Clear any endpoint halt/stall that may have accumulated from a
-			// prior failed transfer (libusb returns LIBUSB_ERROR_IO otherwise).
-			// On some host controllers LIBUSB_ERROR_IO can also occur transiently
-			// after a stall; retry once with a fresh clearHalt in that case.
+			// A USB STALL persists until explicitly cleared: bulkTransfer's
+			// internal retry loop does NOT call clearHalt between attempts, so
+			// all N retries fail instantly when the endpoint is STALLed.  Fix:
+			// call clearHalt before each individual attempt.
+			// Also give the FX2 ~2 ms after asserting FIFO ready (0x21) before
+			// reading; some firmware versions set the flag a few µs before the
+			// endpoint FIFO is fully loaded, causing an immediate STALL.
 			static unsigned char dds140_buf[BUUDAI_DDS140_BUFFER_SIZE];
+			usleep(2000);
 			usbMutex.lock();
-			device->clearHalt(BUUDAI_DDS140_EP_IN);
-			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
-			if (errorCode == LIBUSB_ERROR_IO || errorCode == LIBUSB_ERROR_PIPE) {
+			errorCode = LIBUSB_ERROR_IO;
+			for (int attempt = 0; attempt < BUUDAI_ATTEMPTS_DEFAULT &&
+					(errorCode == LIBUSB_ERROR_IO || errorCode == LIBUSB_ERROR_PIPE); attempt++) {
 				device->clearHalt(BUUDAI_DDS140_EP_IN);
-				errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
+				errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, 1);
 			}
 			usbMutex.unlock();
 
