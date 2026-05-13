@@ -144,14 +144,16 @@ namespace Buudai {
 		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
 		if (device->getModel() == MODEL_DDS140) {
 			// Reset EP6 data toggle to DATA0 BEFORE arming the trigger.
-			// SET_INTERFACE(altsetting=0) resets DATA0/DATA1 unconditionally on
-			// both host and device side (unlike clearHalt which only works when
-			// the endpoint is genuinely stalled).  We must do this while the FIFO
-			// is still empty: calling it after FIFO ready (0x21) causes the Linux
-			// USB stack to invalidate the primed endpoint, producing LIBUSB_ERROR_IO
-			// on the immediately following bulk read.
+			// clearHalt sends CLEAR_FEATURE(ENDPOINT_HALT) to EP6 specifically;
+			// per USB spec §9.4.5 this always resets the data toggle to DATA0 on
+			// both host and device side, regardless of whether the endpoint is
+			// actually halted.  Using SET_INTERFACE here (resetInterface) was
+			// causing LIBUSB_ERROR_IO because it tears down *all* endpoint state
+			// on the interface — on some Linux kernels/host controllers this
+			// leaves EP6 in an inconsistent state for the immediately following
+			// bulk read.
 			usbMutex.lock();
-			device->resetInterface();
+			device->clearHalt(BUUDAI_DDS140_EP_IN);
 			usbMutex.unlock();
 
 			// Arm the trigger: same IN direction as every other DDS140 command.
