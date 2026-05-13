@@ -173,22 +173,22 @@ namespace Buudai {
 			qDebug("DDS140: FIFO ready (status=0x%02x), attempting EP6 bulk read", status);
 
 			// Read the fixed 131072-byte capture buffer from EP6.
-			// A USB STALL persists until explicitly cleared: bulkTransfer's
-			// internal retry loop does NOT call clearHalt between attempts, so
-			// all N retries fail instantly when the endpoint is STALLed.  Fix:
-			// call clearHalt before each individual attempt.
-			// Also give the FX2 ~2 ms after asserting FIFO ready (0x21) before
+			// Give the FX2 ~2 ms after asserting FIFO ready (0x21) before
 			// reading; some firmware versions set the flag a few µs before the
-			// endpoint FIFO is fully loaded, causing an immediate STALL.
+			// endpoint FIFO is fully loaded.
+			//
+			// Use SET_INTERFACE(altsetting=0) instead of clearHalt to reset
+			// data toggles.  clearHalt sends CLEAR_FEATURE(ENDPOINT_HALT) which
+			// only works when the endpoint is genuinely stalled; this FX2
+			// firmware has a DATA toggle mismatch (EPROTO, status=-71) without
+			// holding EP6 in a halted state, so CLEAR_FEATURE is a no-op for
+			// the toggle.  SET_INTERFACE unconditionally resets DATA0/DATA1 to
+			// DATA0 on both host and device side.
 			static unsigned char dds140_buf[BUUDAI_DDS140_BUFFER_SIZE];
 			usleep(2000);
 			usbMutex.lock();
-			errorCode = LIBUSB_ERROR_IO;
-			for (int attempt = 0; attempt < BUUDAI_ATTEMPTS_DEFAULT &&
-					(errorCode == LIBUSB_ERROR_IO || errorCode == LIBUSB_ERROR_PIPE); attempt++) {
-				device->clearHalt(BUUDAI_DDS140_EP_IN);
-				errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, 1);
-			}
+			device->resetInterface();
+			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
 			usbMutex.unlock();
 
 			if (errorCode < 0) {

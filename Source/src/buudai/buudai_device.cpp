@@ -336,6 +336,15 @@ namespace Buudai {
 		if(this->handle)
 			libusb_clear_halt(this->handle, endpoint);
 	}
+
+	/// \brief Resets data toggles for all endpoints via SET_INTERFACE(altsetting=0).
+	/// Unlike clearHalt, this resets DATA0/DATA1 on both host and device side
+	/// unconditionally — fixes EPROTO on FX2 devices where the endpoint is not
+	/// actually halted but has a stale toggle state.
+	void Device::resetInterface() {
+		if (this->handle && this->interface >= 0)
+			libusb_set_interface_alt_setting(this->handle, this->interface, 0);
+	}
 #endif
 
 	/// \brief Bulk write to the oscilloscope.
