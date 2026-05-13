@@ -144,15 +144,15 @@ namespace Buudai {
 		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
 		if (device->getModel() == MODEL_DDS140) {
 			// Reset EP6 data toggle to DATA0 BEFORE arming the trigger.
-			// CLEAR_FEATURE(ENDPOINT_HALT) per USB spec §9.4.5 always resets the
-			// data toggle to DATA0 on both host and device, even when the endpoint
-			// is not halted.  This must happen before arming: calling it after the
-			// FIFO is loaded causes the FX2 to abort the prepared buffer, resulting
-			// in LIBUSB_ERROR_IO on the immediately following bulk read.  The FX2
-			// does NOT advance the EP6 toggle during internal FIFO fill (toggle only
-			// advances on completed USB transactions), so there is no race here.
+			// SET_INTERFACE(alt=0) unconditionally resets all endpoint toggles per
+			// USB spec §9.4.10 and is reliably handled by all FX2 firmware variants.
+			// clearHalt(CLEAR_FEATURE ENDPOINT_HALT) is insufficient: some FX2
+			// firmware silently accepts it on a non-halted endpoint without actually
+			// resetting the device-side toggle, leaving a DATA0/DATA1 mismatch that
+			// causes LIBUSB_ERROR_IO on the bulk read.  This must be called before
+			// arming so the FX2 FIFO hasn't been loaded yet and nothing is aborted.
 			usbMutex.lock();
-			device->clearHalt(BUUDAI_DDS140_EP_IN);
+			device->resetInterface();
 			usbMutex.unlock();
 
 			// Arm the trigger: same IN direction as every other DDS140 command.
