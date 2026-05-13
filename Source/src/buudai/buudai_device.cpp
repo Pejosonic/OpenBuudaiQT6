@@ -320,8 +320,15 @@ namespace Buudai {
 		int errorCode = LIBUSB_ERROR_TIMEOUT;
 		int transferred;
 		for(int attempt = 0; (attempt < attempts || attempts == -1) &&
-				(errorCode == LIBUSB_ERROR_TIMEOUT || errorCode == LIBUSB_ERROR_IO); attempt++)
+				(errorCode == LIBUSB_ERROR_TIMEOUT || errorCode == LIBUSB_ERROR_IO); attempt++) {
+			// CLEAR_FEATURE(ENDPOINT_HALT) resets the DATA0/DATA1 toggle on both
+			// host and device sides — fixes persistent LIBUSB_ERROR_IO caused by a
+			// toggle mismatch when the device-side firmware didn't reset the toggle
+			// (e.g. DDS140 FX2 EP6 after SET_INTERFACE).
+			if (attempt > 0 && errorCode == LIBUSB_ERROR_IO)
+				libusb_clear_halt(this->handle, endpoint);
 			errorCode = libusb_bulk_transfer(this->handle, endpoint, data, length, &transferred, BUUDAI_TIMEOUT);
+		}
 		
 		if(errorCode == LIBUSB_ERROR_NO_DEVICE)
 			this->disconnect();
