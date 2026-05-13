@@ -143,6 +143,17 @@ namespace Buudai {
 
 		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
 		if (device->getModel() == MODEL_DDS140) {
+			// Reset EP6 data toggle to DATA0 BEFORE arming the trigger.
+			// SET_INTERFACE(altsetting=0) resets DATA0/DATA1 unconditionally on
+			// both host and device side (unlike clearHalt which only works when
+			// the endpoint is genuinely stalled).  We must do this while the FIFO
+			// is still empty: calling it after FIFO ready (0x21) causes the Linux
+			// USB stack to invalidate the primed endpoint, producing LIBUSB_ERROR_IO
+			// on the immediately following bulk read.
+			usbMutex.lock();
+			device->resetInterface();
+			usbMutex.unlock();
+
 			// Arm the trigger: same IN direction as every other DDS140 command.
 			// The FX2 firmware only handles 0x33 as a device-to-host (IN) request;
 			// using OUT left EP6 unprimed, causing EPROTO on the subsequent bulk read.
@@ -172,22 +183,12 @@ namespace Buudai {
 			}
 			qDebug("DDS140: FIFO ready (status=0x%02x), attempting EP6 bulk read", status);
 
-			// Read the fixed 131072-byte capture buffer from EP6.
 			// Give the FX2 ~2 ms after asserting FIFO ready (0x21) before
 			// reading; some firmware versions set the flag a few µs before the
 			// endpoint FIFO is fully loaded.
-			//
-			// Use SET_INTERFACE(altsetting=0) instead of clearHalt to reset
-			// data toggles.  clearHalt sends CLEAR_FEATURE(ENDPOINT_HALT) which
-			// only works when the endpoint is genuinely stalled; this FX2
-			// firmware has a DATA toggle mismatch (EPROTO, status=-71) without
-			// holding EP6 in a halted state, so CLEAR_FEATURE is a no-op for
-			// the toggle.  SET_INTERFACE unconditionally resets DATA0/DATA1 to
-			// DATA0 on both host and device side.
 			static unsigned char dds140_buf[BUUDAI_DDS140_BUFFER_SIZE];
 			usleep(2000);
 			usbMutex.lock();
-			device->resetInterface();
 			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
 			usbMutex.unlock();
 
