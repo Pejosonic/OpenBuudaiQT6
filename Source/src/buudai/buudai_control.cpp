@@ -143,19 +143,6 @@ namespace Buudai {
 
 		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
 		if (device->getModel() == MODEL_DDS140) {
-			// Reset EP6 data toggle to DATA0 BEFORE arming the trigger.
-			// clearHalt sends CLEAR_FEATURE(ENDPOINT_HALT) to EP6 specifically;
-			// per USB spec §9.4.5 this always resets the data toggle to DATA0 on
-			// both host and device side, regardless of whether the endpoint is
-			// actually halted.  Using SET_INTERFACE here (resetInterface) was
-			// causing LIBUSB_ERROR_IO because it tears down *all* endpoint state
-			// on the interface — on some Linux kernels/host controllers this
-			// leaves EP6 in an inconsistent state for the immediately following
-			// bulk read.
-			usbMutex.lock();
-			device->clearHalt(BUUDAI_DDS140_EP_IN);
-			usbMutex.unlock();
-
 			// Arm the trigger: same IN direction as every other DDS140 command.
 			// The FX2 firmware only handles 0x33 as a device-to-host (IN) request;
 			// using OUT left EP6 unprimed, causing EPROTO on the subsequent bulk read.
@@ -190,7 +177,14 @@ namespace Buudai {
 			// endpoint FIFO is fully loaded.
 			static unsigned char dds140_buf[BUUDAI_DDS140_BUFFER_SIZE];
 			usleep(2000);
+			// Reset EP6 data toggle to DATA0 immediately before reading, after the
+			// FX2 firmware has finished filling the FIFO.  Doing this before
+			// arming (the previous approach) raced with the FX2 advancing the
+			// toggle during FIFO fill, leaving a mismatch that showed as
+			// LIBUSB_ERROR_IO.  Holding the mutex across clearHalt+bulkTransfer
+			// ensures no other transfer sneaks in between.
 			usbMutex.lock();
+			device->clearHalt(BUUDAI_DDS140_EP_IN);
 			errorCode = device->bulkTransfer(BUUDAI_DDS140_EP_IN, dds140_buf, BUUDAI_DDS140_BUFFER_SIZE, BUUDAI_ATTEMPTS_DEFAULT);
 			usbMutex.unlock();
 
