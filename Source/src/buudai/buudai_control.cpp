@@ -141,15 +141,15 @@ namespace Buudai {
 	int Control::getSamples(bool process) {
         long int errorCode;
 
-		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP6 ----
+		// ---- DDS140 path: burst-capture via CPLD, fixed buffer, EP2 ----
 		if (device->getModel() == MODEL_DDS140) {
-			// Reset EP6 data toggle to DATA0 BEFORE arming the trigger.
+			// Reset EP2 data toggle to DATA0 BEFORE arming the trigger.
 			// SET_INTERFACE(alt=0) unconditionally resets all endpoint toggles per
 			// USB spec §9.4.10 and is reliably handled by all FX2 firmware variants.
 			// clearHalt(CLEAR_FEATURE ENDPOINT_HALT) is insufficient: some FX2
 			// firmware silently accepts it on a non-halted endpoint without actually
 			// resetting the device-side toggle, leaving a DATA0/DATA1 mismatch that
-			// causes LIBUSB_ERROR_IO on the bulk read.  This must be called before
+			// causes LIBUSB_ERROR_IO on the interrupt read.  This must be called before
 			// arming so the FX2 FIFO hasn't been loaded yet and nothing is aborted.
 			usbMutex.lock();
 			device->resetInterface();
@@ -157,7 +157,7 @@ namespace Buudai {
 
 			// Arm the trigger: same IN direction as every other DDS140 command.
 			// The FX2 firmware only handles 0x33 as a device-to-host (IN) request;
-			// using OUT left EP6 unprimed, causing EPROTO on the subsequent bulk read.
+			// using OUT left EP2 unprimed, causing EPROTO on the subsequent interrupt read.
 			unsigned char armResp = sendRequest(FIFO_CONTROL, 0x00);
 			qDebug("DDS140: arm cmd 0x%02x response=0x%02x", FIFO_CONTROL, armResp);
 
@@ -182,7 +182,7 @@ namespace Buudai {
 				       status, BUUDAI_DDS140_FIFO_READY);
 				return LIBUSB_ERROR_TIMEOUT;
 			}
-			qDebug("DDS140: FIFO ready (status=0x%02x), attempting EP6 bulk read", status);
+			qDebug("DDS140: FIFO ready (status=0x%02x), attempting EP2 interrupt read", status);
 
 			// Give the FX2 ~2 ms after asserting FIFO ready (0x21) before
 			// reading; some firmware versions set the flag a few µs before the
@@ -194,7 +194,7 @@ namespace Buudai {
 			usbMutex.unlock();
 
 			if (errorCode < 0) {
-				qDebug("DDS140: EP6 bulk read failed: %s (code %d)",
+				qDebug("DDS140: EP2 interrupt read failed: %s (code %d)",
 				       Helper::libUsbErrorString(errorCode).toLocal8Bit().data(), errorCode);
 				return errorCode;
 			}

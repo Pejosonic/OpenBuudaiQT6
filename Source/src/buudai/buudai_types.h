@@ -35,7 +35,7 @@
 #define BUUDAI_EP_OUT              0x02 ///< OUT Endpoint for bulk transfers (DDS120)
 #define BUUDAI_EP_IN               0x82 ///< IN Endpoint for bulk transfers (DDS120, EP2)
 #define BUUDAI_DDS140_EP_OUT       0x04 ///< OUT Endpoint for DDS140 bulk writes (EP4)
-#define BUUDAI_DDS140_EP_IN        0x86 ///< IN Endpoint for DDS140 sample data (EP6)
+#define BUUDAI_DDS140_EP_IN        0x82 ///< IN Endpoint for DDS140 sample data (EP2, interrupt)
 #define BUUDAI_TIMEOUT              500 ///< Timeout for USB transfers in ms
 #define BUUDAI_ATTEMPTS_DEFAULT       3 ///< The number of transfer attempts
 
